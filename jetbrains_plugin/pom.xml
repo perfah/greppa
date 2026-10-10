@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>antiviber</artifactId>
+    <version>1.0.4</version>
+    <packaging>jar</packaging>
+
+    <name>Antiviber</name>
+    <description>JetBrains plugin providing AI-based auto-completion via an external Rust LSP server.</description>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <idea.home>C:\Program Files\JetBrains\RustRover 2024.2.3</idea.home>
+        <!-- Path to a classpath jar produced by the build script that references all IDE jars. -->
+        <idea.classpath.jar></idea.classpath.jar>
+    </properties>
+
+    <dependencies>
+        <!-- Gson is bundled with JetBrains IDEs. -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+            <version>24.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Classpath jar that references every IntelliJ Platform jar. -->
+        <dependency>
+            <groupId>com.jetbrains</groupId>
+            <artifactId>ide-classpath</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${idea.classpath.jar}</systemPath>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+        </resources>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <fork>true</fork>
+                    <!-- The .exe extension matters: the forked compiler is
+                         launched as a Windows process, and an extensionless
+                         path can fail to resolve. The build script sets
+                         JAVA_HOME to this JDK, so java.home points here. -->
+                    <executable>${java.home}/bin/javac.exe</executable>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

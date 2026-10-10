@@ -1,0 +1,286 @@
+/// The user's free-text standing instructions for the LLM, configured in
+/// the IDE's settings (the guideline field) and passed to the server as
+/// the ANTIVIBER_LLM_GUIDELINE environment variable when the LSP server
+/// is launched. Trimmed, and None when unset or empty: no guideline.
+///
+/// Resolved here, where the prompts are built, so the guideline has a
+/// single consumer and needs no plumbing through the tick listener. The
+/// environment of a running process never changes (the IDE sets the
+/// variable at server launch), so changing the guideline in the settings
+/// takes effect the next time the LSP server starts.
+fn guideline() -> Option<String> {
+    std::env::var("ANTIVIBER_LLM_GUIDELINE")
+        .ok()
+        .map(|guideline| guideline.trim().to_string())
+        .filter(|guideline| !guideline.is_empty())
+}
+
+/// Builds the prompt used to ask the LLM to analyze a file in a single
+/// inference and produce a Markdown document.
+///
+/// The document must contain the following sections, in this order, each
+/// introduced by a ## heading that matches a tool window section:
+///
+///   ## Scope (topic summary, plus answers to questions found in the code)
+///   ## General direction
+///   ## Problems
+///   ## Suggested actions
+///   ## Current functionality
+///   ## Specific recommendations
+///
+/// Within the sections the model may use any Markdown formatting it likes
+/// (bold, italics, subheadings, lists, inline code, fenced code blocks,
+/// blockquotes), which the IDE renders with proper fonts and sizes. The
+/// server writes the document to disk verbatim; no server-side parsing
+/// happens anymore.
+///
+/// Consecutive ## sections are separated by a horizontal rule (a line
+/// containing only ---), which the IDE renders as a dividing line between
+/// the sections.
+///
+/// When `topic` is set, the prompt instructs the model to view the entire
+/// document through that topic: every section prioritizes what is
+/// relevant to it, and a section with nothing relevant says so explicitly.
+/// When it is None, the analysis is topic-agnostic.
+///
+/// When the user configured a guideline in the IDE's settings, it is
+/// injected right after the topic as standing instructions the model must
+/// follow throughout the document; see guideline.
+///
+/// The code is embedded with a 1-based line number prefix on every line,
+/// matching the line numbers the IDE's editor gutter shows. The model must
+/// use those numbers for every line reference, so the references match the
+/// code exactly - without the prefixes the model had to count the lines
+/// itself, which it cannot do reliably and which made the references point
+/// at the wrong code. The IDE renders the references as clickable links to
+/// the code.
+///
+/// The Problems and Suggested actions sections reference a single exact
+/// line, never a range: the first line of the code a problem concerns, and
+/// for a suggested action the line where the step's code is inserted or
+/// the first existing line it replaces. The Current functionality and
+/// Specific recommendations sections keep line ranges, because their
+/// segments are regions of the file by design.
+pub fn analysis_prompt(
+    cursor_index: Option<usize>,
+    file_content: &str,
+    topic: Option<&str>,
+) -> String {
+    let total_lines = file_content.lines().count().max(1);
+    // A Markdown code fence (three backticks), built without a literal fence
+    // so this source file stays easy to embed and diff.
+    let fence = "`".repeat(3);
+
+    // The code with a 1-based line number prefix on every line, like the
+    // IDE's editor gutter shows them. The model references these numbers
+    // instead of counting lines itself, which it cannot do reliably and
+    // which made the line references point at the wrong code.
+    let numbered_code = file_content
+        .lines()
+        .enumerate()
+        .map(|(index, line)| format!("{}: {}", index + 1, line))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // The optional topic/goal the user set in the tool window. When set, it
+    // is injected as its own paragraph right after the intro, so the model
+    // views every section through it; when absent, the prompt is identical
+    // to a topic-less analysis.
+    let topic_section = match topic {
+        Some(topic) => format!(
+            "The user has set the following topic for this review: '{topic}'. \
+View the entire document through the lens of this topic: in every section, prioritize what is relevant to it. \
+If a section has nothing relevant to the topic, say so explicitly instead of inventing relevance.\n\n"
+        ),
+        None => String::new(),
+    };
+
+    // The user's free-text standing instructions from the settings, when
+    // configured. Injected as its own paragraph right after the topic, so
+    // the model follows them in every section; when absent, the prompt is
+    // identical to a guideline-free analysis.
+    let guideline_section = match guideline() {
+        Some(guideline) => format!(
+            "The user has configured the following standing instructions for your reviews; follow them throughout the document wherever they apply:\n{guideline}\n\n"
+        ),
+        None => String::new(),
+    };
+
+    let cursor_section = match cursor_index {
+        Some(index) => format!(
+            "The cursor is at character index {index}. In this section, mark the segment that contains the cursor by appending **(current)** to its subheading."
+        ),
+        None => "No cursor position is known; do not mark any segment as current.".to_string(),
+    };
+
+    format!(
+        "You are an expert code reviewer. Analyze the code at the bottom and answer with a single Markdown document - no text before or after it. \
+Start the document directly with its first ## heading. Never wrap the whole document, or any whole section, in a fenced code block or in BEGIN/END-style markers; only the individual code snippets and AI agent prompts described later may be fenced. \
+{topic_section}\
+{guideline_section}\
+The document must contain all sections below, in this order, each introduced by a ## heading with exactly the text afterwards:
+Within the sections, format the content freely with Markdown: use **bold**, *italics*, ### subheadings, bullet and numbered lists, `inline code`, blockquotes and fenced code blocks. \
+Do not use # or ## headings other than the section headings listed above. \
+Separate every ## section from the next with a horizontal rule: directly before every ## heading except the first one, put a line containing only --- with an empty line before and after it.
+
+Sections:
+
+## Scope
+Explicitly mention what the topic is, summarizing what it is about. If there is no topic, just omit it.
+
+Also answer all questions in the code below in a bullet point list (each line starts with a '* '), if there are any. \
+Note that we are requesting the answer to the question, not the question itself. \
+Do not miss any questions.
+
+## General direction
+
+### Simple version
+Describe what the user is writing and what the file as a whole accomplishes, but explain it in a way that is easy to understand by an five/ten year old (explain like I'm 5).
+
+### Technical version
+Describe what the user is writing and what the file as a whole accomplishes. Be informative, technical and elaborate.
+
+### Graph
+
+Create a compact flowchart in ASCII art showing the file's main control flow - the functions, branches and loops that
+matter, not every line. But make it pedagogic / explanatory for a person who is new to what the file is about. \
+Wrap it in a fenced code block: a line with {fence}, the diagram, then a closing line with {fence}. \
+If the file has no control flow worth visualizing (e.g. data or configuration), write *No flowchart: nothing to
+visualize.* instead.
+
+## Current functionality
+Split the ENTIRE file into meaningful logical segments; every line of the file must belong to at least one segment, and together the segments must cover the whole file from line 1 through line {total_lines}. \
+Give each segment a ### subheading that ends with its 1-based inclusive line range, like: ### Class declaration and fields (Lines 5-12). \
+Under each subheading, review the segment in 2-3 sentences about potential issues, bugs or improvements.
+
+## Problems
+List the problems you see in the file as a whole, not per segment, one bullet per problem, explained properly. \
+Start EVERY bullet with the exact line number of the first line of the code it concerns, using the 1-based line numbers shown at the start of each code line below, like: - Line 13: Missing error handling in the loop. \
+Never use a line range in this section and never invent a line number: copy it from the prefixes of the code below. \
+A problem that concerns the whole file uses Line 1.
+If there are no problems, write *No problems found.*
+Be especially attentive if the user is hinting that they need help with something, like implementing a specific algorithm. \
+For example: If they write 'I want to implement a peer-to-peer network using rustp2p' then 'Missing implementation for peer-to-peer network' should be considered a problem.
+
+## Recommendations
+Describe the suggested approaches for solving the problems listed in the Problems section.
+Here it's important to be elaborate: give each step real detail and reasoning.
+This is the most important part of the review and must guide the user on what to do next. \
+Every step in both groups below must start with the exact line number where the change happens: the line at which the step's code is inserted, or the FIRST line of the existing code that the step's code replaces. \
+Use the 1-based line numbers shown at the start of each code line below, like: 1. Line 13: Refactor the loop to cache the list. \
+Never use a line range in this section, never invent a line number (copy it from the prefixes of the code below), and never point at a line inside a suggested code snippet - the reference always points into the analyzed file. \
+A step that affects the whole file uses Line 1. \
+Split the steps into exactly two groups, in this order, each introduced by a ### subheading with exactly this text:
+
+### Critical for understanding
+Contains the steps that are essential for understanding the overall program - the design decisions and core logic a human should work through personally. \
+Number the steps. For EVERY step, first write a detailed description of how the implementation might look: the approach, the important data structures, the control flow, and why it works. \
+Then add a concrete code snippet in a fenced code block - a line with {fence} (optionally followed by the language name), then the code, then a closing line with {fence} - showing that implementation. \
+The snippet belongs at the step's referenced line: it is inserted at that line, or it replaces the existing code starting at that line. \
+Write the snippet in the language of the analyzed file. \
+Every snippet must be a complete, working implementation: NEVER a placeholder, stub or skeleton, and never a comment like 'placeholder', 'TODO' or 'implement logic here' standing in for real code. \
+Steps in this group must NEVER include an AI agent prompt.
+
+### Automatable
+Contains the steps that are trivial labor and do not require understanding the overall program, so the user can hand them to an AI agent directly. \
+Number the steps, one short sentence per step. \
+For EVERY step, add a fenced code block whose first line is 'AI agent prompt:' followed by a self-contained prompt that the user can copy-paste to an AI agent to execute the step without any other context. \
+The AI agent prompt is the only code block allowed in this group; do not add normal code snippets here.
+
+If a group has no steps, write *None.* under its subheading and add one sentence explaining that this can happen while the code does not yet have a clear direction.
+If you have no suggestions at all, write *No suggestions.* and omit both ### subheadings.
+
+{cursor_section}
+
+BEGIN CODE
+{numbered_code}
+END CODE"
+    )
+}
+
+/// Builds the prompt used to ask the LLM for a code completion at the
+/// caret position.
+///
+/// The completion is context-aware: when the file has an analysis document
+/// (written by a previous analysis tick), it is included so the completion
+/// fits what the code does and what the analysis says is planned. The code
+/// is embedded with a 1-based line number prefix on every line (like the
+/// editor gutter) and a <CURSOR> marker at the caret, so the model sees
+/// the exact insertion point instead of having to count lines itself -
+/// the old prompt named only the line and column numbers over the raw
+/// code, and the model kept echoing code that already existed.
+///
+/// When the user configured a guideline in the IDE's settings, it is
+/// injected as standing instructions the completion must follow, so
+/// completions respect the same guidelines as analyses; see guideline.
+pub fn completion_prompt(
+    file_content: &str,
+    line: u32,
+    character: u32,
+    analysis: Option<&str>,
+) -> String {
+    let numbered = numbered_code_with_cursor(file_content, line, character);
+    // 1-based line and column, matching the numbers the editor shows.
+    let gutter_line = line + 1;
+    let gutter_column = character + 1;
+
+    // The user's standing instructions from the settings, when configured,
+    // so completions follow the same guidelines as analyses (e.g. style
+    // preferences or constraints).
+    let guideline_section = match guideline() {
+        Some(guideline) => format!(
+            "The user has configured the following standing instructions for all code you produce; follow them in the completion:\n{guideline}\n\n"
+        ),
+        None => String::new(),
+    };
+
+    // The analysis document of the file, when one exists. It is context
+    // only: the model must output insertion code, not restate it.
+    let analysis_section = match analysis {
+        Some(analysis) => format!(
+            "A code reviewer analyzed this file; its analysis follows between the ANALYSIS lines. \
+Use it as context for what the code does and what changes are planned, so the completion fits the intended direction. \
+Do not restate or quote the analysis; output only insertion code.\n\n\
+=== ANALYSIS ===\n{analysis}\n=== END ANALYSIS ===\n\n"
+        ),
+        None => String::new(),
+    };
+
+    format!(
+        "The user's caret is at the position marked with <CURSOR> in the code below. \
+Output ONLY the text to insert at the caret: code that continues the file naturally from that exact point. \
+No explanations, no markdown, no code fences, never repeat code that already exists before the caret, and never reproduce the line-number prefixes - the insertion must be new code.\n\n\
+{guideline_section}\
+{analysis_section}\
+The code below has each line prefixed with its 1-based line number (the prefixes are not part of the code), \
+and the caret is at line {gutter_line}, column {gutter_column}.\n\n\
+=== CODE ===\n{numbered}=== END CODE ===\n\n\
+Output only the insertion text for the caret position."
+    )
+}
+
+/// Returns the code with a 1-based line number prefix on every line and a
+/// <CURSOR> marker at the given 0-based line and character position,
+/// clamped into the line. The prefixes match the IDE's editor gutter, so
+/// the model locates the caret by reading instead of counting. LSP columns
+/// are UTF-16 units; the clamp uses the line's character count, which can
+/// differ only for lines with non-BMP characters.
+fn numbered_code_with_cursor(file_content: &str, line: u32, character: u32) -> String {
+    let target_line = line as usize;
+    let mut out = String::new();
+    for (index, text) in file_content.lines().enumerate() {
+        out.push_str(&format!("{:4}: ", index + 1));
+        if index == target_line {
+            let column = (character as usize).min(text.chars().count());
+            let before: String = text.chars().take(column).collect();
+            let after: String = text.chars().skip(column).collect();
+            out.push_str(&before);
+            out.push_str("<CURSOR>");
+            out.push_str(&after);
+        } else {
+            out.push_str(text);
+        }
+        out.push('\n');
+    }
+    out
+}

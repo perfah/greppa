@@ -1,0 +1,56 @@
+<idea-plugin>
+    <id>com.example.antiviber</id>
+    <name>Antiviber</name>
+    <version>1.0.4</version>
+    <vendor>Example</vendor>
+
+    <description><![CDATA[
+        Provides AI-based auto-completion and a background code interpretation report by communicating with an external Rust LSP server.
+    ]]></description>
+
+    <change-notes><![CDATA[
+        Added the Antiviber Interpretation tool window that displays AI-generated segment reviews and highlights the segment currently being edited.
+    ]]></change-notes>
+
+    <idea-version since-build="232.0"/>
+
+    <depends>com.intellij.modules.platform</depends>
+    <!-- MarkdownParser renders the analysis with the IDE's bundled Markdown
+         parser (org.intellij.markdown), which lives in the Markdown plugin's
+         classloader. Without this dependency those classes are not visible
+         to this plugin at runtime. -->
+    <depends>org.intellij.plugins.markdown</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <platform.lsp.serverSupportProvider
+                implementation="com.example.antiviber.AntiviberLspServerSupportProvider"/>
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.example.antiviber.AntiviberSettingsConfigurable"
+                id="com.example.antiviber.AntiviberSettingsConfigurable"
+                displayName="Antiviber LSP Server"/>
+        <applicationService
+                serviceImplementation="com.example.antiviber.AntiviberSettingsState"/>
+        <toolWindow id="Antiviber Interpretation"
+                    anchor="right"
+                    factoryClass="com.example.antiviber.HintsToolWindowFactory"
+                    icon="/icons/antiviber.svg"
+                    canCloseContents="false"/>
+        <!-- Ranks the Antiviber LSP completion item to the top of the
+             completion popup; see AntiviberCompletionWeigher. order="first"
+             makes it the leading sorting criterion, ahead of any other
+             custom weigher (e.g. one registered by the Rust plugin). -->
+        <lookup.elementWeigher
+                implementationClass="com.example.antiviber.AntiviberCompletionWeigher"
+                order="first"/>
+    </extensions>
+
+    <actions>
+        <action id="com.example.antiviber.OpenAntiviberSettings"
+                class="com.example.antiviber.OpenAntiviberSettingsAction"
+                text="Antiviber Settings"
+                description="Open Antiviber LSP Server settings">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
