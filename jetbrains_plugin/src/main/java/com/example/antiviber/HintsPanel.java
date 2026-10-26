@@ -247,8 +247,8 @@ public class HintsPanel extends JPanel {
      * this topic when one is set.
      *
      * The topic is applied only explicitly: pressing Enter or clicking the
-     * Apply button stores it and asks the server to re-analyze the current
-     * file. Typing alone triggers nothing - re-analyzing on every
+     * Refresh button stores it and asks the server to re-analyze the
+     * current file. Typing alone triggers nothing - re-analyzing on every
      * keystroke would restart the LLM analysis for each character typed,
      * which is exactly what the explicit apply avoids.
      *
@@ -261,13 +261,13 @@ public class HintsPanel extends JPanel {
         panel.add(new JLabel("Topic/goal:"), BorderLayout.WEST);
         topicField.getEmptyText().setText("Optional focus, e.g. 'troubleshooting'");
         topicField.setToolTipText(
-                "Optional topic/goal the interpretation is viewed through. Press Enter or click Apply to set it and re-generate the current file's interpretation; typing alone triggers nothing.");
+                "Optional topic/goal the interpretation is viewed through. Press Enter or click Refresh to set it and re-generate the current file's interpretation; typing alone triggers nothing.");
         topicField.addActionListener(e -> applyTopic());
         panel.add(topicField, BorderLayout.CENTER);
 
-        JButton applyButton = new JButton("Apply");
-        applyButton.setToolTipText("Apply the topic/goal and re-generate the current file's interpretation.");
-        applyButton.addActionListener(e -> applyTopic());
+        JButton refreshButton = new JButton("Refresh");
+        refreshButton.setToolTipText("Re-generate the current file's interpretation, applying the topic/goal.");
+        refreshButton.addActionListener(e -> applyTopic());
 
         pauseButton.setToolTipText(
                 "Pause the LSP server's interpretations and AI completions so no LLM tokens are spent. "
@@ -276,7 +276,7 @@ public class HintsPanel extends JPanel {
         pauseButton.addActionListener(e -> setPaused(pauseButton.isSelected()));
 
         JPanel controls = new JPanel(new BorderLayout(4, 0));
-        controls.add(applyButton, BorderLayout.WEST);
+        controls.add(refreshButton, BorderLayout.WEST);
         controls.add(pauseButton, BorderLayout.EAST);
         panel.add(controls, BorderLayout.EAST);
         return panel;
@@ -361,11 +361,11 @@ public class HintsPanel extends JPanel {
      * a fresh analysis of the current file, so the new topic takes effect
      * immediately instead of only on the next file change or tab switch.
      *
-     * Called by the Apply button and by pressing Enter in the topic field;
-     * typing alone never triggers anything, so the LLM is never re-run per
-     * keystroke. The status label confirms that the topic was stored,
-     * because the field itself gives no apply feedback; the next refresh
-     * overwrites the label once the re-analysis arrives.
+     * Called by the Refresh button and by pressing Enter in the topic
+     * field; typing alone never triggers anything, so the LLM is never
+     * re-run per keystroke. The status label confirms that the topic was
+     * stored, because the field itself gives no apply feedback; the next
+     * refresh overwrites the label once the re-analysis arrives.
      */
     private void applyTopic() {
         String topic = topicField.getText().trim();
@@ -609,9 +609,9 @@ public class HintsPanel extends JPanel {
             if (lineCount == 0) {
                 return;
             }
-            // 1-based link number to 0-based LogicalPosition; clamped for
-            // stale analyses and for a model that outputs 0 anyway.
+
             int line = Math.max(0, Math.min(startLine - 1, lineCount - 1));
+
             editor.getCaretModel().moveToLogicalPosition(new LogicalPosition(line, 0));
             editor.getScrollingModel().scrollToCaret(ScrollType.CENTER);
             return;

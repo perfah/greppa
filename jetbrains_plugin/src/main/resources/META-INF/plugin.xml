@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.example.antiviber</id>
     <name>Antiviber</name>
-    <version>1.0.4</version>
+    <version>1.0.6</version>
     <vendor>Example</vendor>
 
     <description><![CDATA[
@@ -43,6 +43,12 @@
         <lookup.elementWeigher
                 implementationClass="com.example.antiviber.AntiviberCompletionWeigher"
                 order="first"/>
+        <!-- AntiviberProjectActivity subscribes the listener that refreshes
+             the analysis when a document is saved (Ctrl+S, Save All,
+             autosave) by writing the tick trigger file. The class was
+             previously dead code with no registration; without this entry
+             the save listener never subscribes. -->
+        <postStartupActivity implementation="com.example.antiviber.AntiviberProjectActivity"/>
     </extensions>
 
     <actions>

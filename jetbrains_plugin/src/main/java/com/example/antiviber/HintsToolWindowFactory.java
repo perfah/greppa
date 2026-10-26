@@ -19,25 +19,34 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         HintsPanel panel = new HintsPanel();
-        Content content = ContentFactory.getInstance().createContent(panel, "", false);
+        Content content = ContentFactory.getInstance().createContent(panel, "Interpretation", false);
+        ImportsPanel importsPanel = new ImportsPanel();
+        Content importsContent = ContentFactory.getInstance().createContent(importsPanel, "Imports", false);
         toolWindow.getContentManager().addContent(content);
+        toolWindow.getContentManager().addContent(importsContent);
 
+        // The Imports action sits between Reload and Settings, so the
+        // button that opens the Imports pane is directly left of the
+        // settings gear.
         List<AnAction> titleActions = Arrays.asList(
                 new RefreshHintsAction(),
+                new OpenImportsPaneAction(),
                 new OpenAntiviberSettingsAction()
         );
         toolWindow.setTitleActions(titleActions);
 
-        // Ensure the panel refreshes whenever hints are updated or the active file changes.
-        // This is the single listener registration for the panel, and the
-        // reference is stored so contentRemoved below removes this exact
-        // instance: every panel::refresh evaluation creates a new lambda,
+        // Ensure the panels refresh whenever hints are updated or the active file changes.
+        // These are the single listener registrations for the panels, and the
+        // references are stored so contentRemoved below removes these exact
+        // instances: every panel::refresh evaluation creates a new lambda,
         // so calling removeListener(panel::refresh) there (as before)
-        // removed nothing and the panel kept receiving notifications
-        // forever after its content was removed. The panel does not
-        // register itself either, so each update refreshes it exactly once.
+        // removed nothing and the panels kept receiving notifications
+        // forever after their content was removed. The panels do not
+        // register themselves either, so each update refreshes them exactly once.
         Runnable refreshListener = panel::refresh;
         HintsService.addListener(refreshListener);
+        Runnable importsRefreshListener = importsPanel::refresh;
+        HintsService.addListener(importsRefreshListener);
 
         // Register the per-project listeners here instead of from
         // AntiviberProjectManagerListener. That class hooked
@@ -68,6 +77,7 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
                     poller.stop();
                 }
                 HintsService.removeListener(refreshListener);
+                HintsService.removeListener(importsRefreshListener);
             }
         });
     }

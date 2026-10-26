@@ -39,9 +39,13 @@ public class AntiviberLspServerListener implements LspServerListener {
      */
     private static final CopyOnWriteArrayList<LspServer> runningServers = new CopyOnWriteArrayList<>();
 
+
+
     /** Registers a running server. Called when the platform starts the server. */
     public static void registerServer(@NotNull LspServer server) {
         LOG.info("AntiviberLspServerListener: registering server " + server);
+
+
         if (!runningServers.contains(server)) {
             runningServers.add(server);
         }
@@ -87,7 +91,8 @@ public class AntiviberLspServerListener implements LspServerListener {
             String markdown = root.has("markdown") ? root.get("markdown").getAsString() : "";
             LOG.info("Updating analysis from antiviber/hints notification for " + uri);
             HintsService.updateMarkdownForUri(uri, markdown);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             LOG.error("Failed to parse antiviber/hints notification", e);
         }
     }

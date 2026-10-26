@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,6 +57,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * e.g. after a bad regeneration. The history is in-memory only; it does
  * not survive an IDE restart.
  *
+ * The service also stores the Imports pane's state per file: the entries
+ * the local import scan produced (see ImportDetector) plus the files the
+ * user added manually, and which of them are checked (attached to the
+ * analysis); see setImportsForUri and ImportEntry. In-memory only, like
+ * the documents themselves.
+ *
  * The per-event logs are at debug level, not info: while an analysis
  * streams, the poller forwards updates several times per second, and at
  * info level that flooded idea.log with roughly twenty lines per second
@@ -87,6 +94,13 @@ public class HintsService {
      * In-memory only, like the documents themselves.
      */
     private static final Map<String, List<String>> historyByUri = new ConcurrentHashMap<>();
+    /**
+     * The import entries of a file for the Imports pane, per normalized
+     * URI: the entries the local import scan produced (see ImportDetector)
+     * plus the files the user added manually, in that order. In-memory
+     * only, like the analysis documents themselves.
+     */
+    private static final Map<String, List<ImportEntry>> importsByUri = new ConcurrentHashMap<>();
     private static final List<Runnable> listeners = new ArrayList<>();
 
     /**
@@ -214,6 +228,157 @@ public class HintsService {
     }
 
     /**
+     * Registers the scanned import entries of a file and notifies the
+     * listeners so the Imports pane shows them. A new entry keeps the
+     * checked state the scan produced (found files are checked by
+     * default; see ImportDetector), and the checked state of a scanned
+     * entry whose specifier and resolved file match an existing one
+     * survives the re-scan, so the user's unchecking is preserved.
+     * Manually added entries are kept; everything else is replaced.
+     */
+    public static synchronized void setImportsForUri(String uri, List<ImportEntry> extracted) {
+        String normalized = normalizeUri(uri);
+        List<ImportEntry> previous = importsByUri.get(normalized);
+        List<ImportEntry> merged = new ArrayList<>();
+        for (ImportEntry entry : extracted) {
+            // A new entry defaults to the checked state the scan produced;
+            // an entry that also existed in the previous list keeps the
+            // user's choice instead.
+            boolean checked = entry.checked;
+            if (previous != null) {
+                for (ImportEntry old : previous) {
+                    if (!old.manual && old.id().equals(entry.id())) {
+                        checked = old.checked;
+                        break;
+                    }
+                }
+            }
+            merged.add(new ImportEntry(entry.specifier, entry.uri, entry.resolvedPath, false, checked));
+        }
+        if (previous != null) {
+            for (ImportEntry old : previous) {
+                if (old.manual) {
+                    merged.add(old);
+                }
+            }
+        }
+        importsByUri.put(normalized, List.copyOf(merged));
+        LOG.info("HintsService.setImportsForUri: " + merged.size() + " entr(y/ies) for " + normalized);
+        notifyListenersIfCurrentFile(normalized);
+    }
+
+    /**
+     * Returns the import entries stored for the file, or null when the
+     * imports were never scanned (which is distinct from an empty scan
+     * result). A copy is returned, so callers can iterate safely while
+     * a re-scan updates the list.
+     */
+    public static synchronized List<ImportEntry> getImportsForUri(String uri) {
+        if (uri == null) {
+            return null;
+        }
+        List<ImportEntry> entries = importsByUri.get(normalizeUri(uri));
+        return entries == null ? null : List.copyOf(entries);
+    }
+
+    /**
+     * Sets whether the entry identified by id() is attached to the
+     * analysis. Storing is immediate, but no analysis is re-run: the
+     * attachment applies from the next analysis on (Refresh, Reload, tab
+     * switch, save), so checking several boxes costs no LLM tokens.
+     */
+    public static synchronized void setImportChecked(String uri, String id, boolean checked) {
+        String normalized = normalizeUri(uri);
+        List<ImportEntry> entries = importsByUri.get(normalized);
+        if (entries == null) {
+            return;
+        }
+        List<ImportEntry> updated = new ArrayList<>();
+        boolean changed = false;
+        for (ImportEntry entry : entries) {
+            if (entry.id().equals(id) && entry.checked != checked) {
+                updated.add(new ImportEntry(entry.specifier, entry.uri, entry.resolvedPath, entry.manual, checked));
+                changed = true;
+            } else {
+                updated.add(entry);
+            }
+        }
+        if (changed) {
+            importsByUri.put(normalized, List.copyOf(updated));
+            notifyListenersIfCurrentFile(normalized);
+        }
+    }
+
+    /**
+     * Adds a file the user picked manually to the file's import entries,
+     * checked, so it is attached from the next analysis on. Adding the
+     * same file twice is a no-op.
+     */
+    public static synchronized void addManualImport(String uri, String fileUri, String displayName, String path) {
+        String normalized = normalizeUri(uri);
+        List<ImportEntry> entries = new ArrayList<>(importsByUri.getOrDefault(normalized, List.of()));
+        ImportEntry entry = new ImportEntry(displayName, fileUri, path, true, true);
+        for (ImportEntry existing : entries) {
+            if (existing.id().equals(entry.id())) {
+                return;
+            }
+        }
+        entries.add(entry);
+        importsByUri.put(normalized, List.copyOf(entries));
+        LOG.info("HintsService.addManualImport: " + fileUri + " for " + normalized);
+        notifyListenersIfCurrentFile(normalized);
+    }
+
+    /**
+     * Removes the entry identified by id() from the file's import entries.
+     * Scanned entries reappear with the next scan; manual entries are
+     * gone until added again.
+     */
+    public static synchronized void removeImport(String uri, String id) {
+        String normalized = normalizeUri(uri);
+        List<ImportEntry> entries = importsByUri.get(normalized);
+        if (entries == null) {
+            return;
+        }
+        List<ImportEntry> updated = new ArrayList<>();
+        boolean changed = false;
+        for (ImportEntry entry : entries) {
+            if (entry.id().equals(id)) {
+                changed = true;
+            } else {
+                updated.add(entry);
+            }
+        }
+        if (changed) {
+            importsByUri.put(normalized, List.copyOf(updated));
+            notifyListenersIfCurrentFile(normalized);
+        }
+    }
+
+    /**
+     * Returns the URLs of the files attached to the file's analysis: the
+     * checked entries' resolved files, de-duplicated and in list order.
+     * HintsFilePoller.writeTriggerFile inlines their content into the
+     * trigger file.
+     */
+    public static synchronized List<String> getAttachmentUris(String uri) {
+        if (uri == null) {
+            return List.of();
+        }
+        List<ImportEntry> entries = importsByUri.get(normalizeUri(uri));
+        if (entries == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> uris = new LinkedHashSet<>();
+        for (ImportEntry entry : entries) {
+            if (entry.checked && entry.uri != null) {
+                uris.add(entry.uri);
+            }
+        }
+        return List.copyOf(uris);
+    }
+
+    /**
      * Sets the topic/goal the analyses are viewed through; an empty or
      * null value clears it. Does not notify the listeners: the topic
      * alone does not change the displayed document, the re-analysis it
@@ -251,8 +416,8 @@ public class HintsService {
      * Stores an error message reported by the LSP server (the LLM service
      * failed) and notifies the listeners so the panel shows it in its
      * status line. An empty or null message clears the error. Unchanged
-     * messages are ignored, so the periodic clear the server writes at
-     * the start of every analysis attempt does not spam the listeners.
+     * messages are ignored, so the periodic clear the server writes at the
+     * start of every analysis attempt does not spam the listeners.
      */
     public static void setErrorMessage(String message) {
         String value = message == null ? "" : message;
@@ -542,6 +707,42 @@ public class HintsService {
             }
         }
         return -1;
+    }
+
+    /**
+     * One row of the Imports pane: a local file the scan found (manual =
+     * false) or a file the user added manually (manual = true). Immutable;
+     * the service methods replace whole entries.
+     */
+    public static final class ImportEntry {
+        /** The import string exactly as written in the code, or the added file's name. */
+        public final String specifier;
+        /** The resolved file's URL. */
+        public final String uri;
+        /** The resolved file's path, shown in the pane. */
+        public final String resolvedPath;
+        /** Whether the user added this entry manually; manual entries survive re-scans. */
+        public final boolean manual;
+        /** Whether the file is attached to the analysis as context. */
+        public final boolean checked;
+
+        public ImportEntry(String specifier, String uri, String resolvedPath, boolean manual, boolean checked) {
+            this.specifier = specifier;
+            this.uri = uri;
+            this.resolvedPath = resolvedPath;
+            this.manual = manual;
+            this.checked = checked;
+        }
+
+        /**
+         * Stable identity of the entry within its file's list: the
+         * specifier together with the resolved file, so two imports of
+         * the same file are still distinct rows while re-scans can carry
+         * the checked state over.
+         */
+        public String id() {
+            return specifier + "\n" + uri;
+        }
     }
 
     /** One ## section of a Markdown document. */

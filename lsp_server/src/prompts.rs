@@ -1,3 +1,5 @@
+use crate::tick_listener::{AttachedFile, CompilerError};
+
 /// The user's free-text standing instructions for the LLM, configured in
 /// the IDE's settings (the guideline field) and passed to the server as
 /// the ANTIVIBER_LLM_GUIDELINE environment variable when the LSP server
@@ -22,11 +24,11 @@ fn guideline() -> Option<String> {
 /// introduced by a ## heading that matches a tool window section:
 ///
 ///   ## Scope (topic summary, plus answers to questions found in the code)
-///   ## General direction
-///   ## Problems
-///   ## Suggested actions
+///   ## General understanding
+///   ## Relationship to other files (how each attached file is used)
 ///   ## Current functionality
-///   ## Specific recommendations
+///   ## Problems
+///   ## Recommendations
 ///
 /// Within the sections the model may use any Markdown formatting it likes
 /// (bold, italics, subheadings, lists, inline code, fenced code blocks,
@@ -47,6 +49,24 @@ fn guideline() -> Option<String> {
 /// injected right after the topic as standing instructions the model must
 /// follow throughout the document; see guideline.
 ///
+/// When `errors` is non-empty it holds the compilation/syntax errors the
+/// IDE's code analyzer reports for the file (the red highlights the
+/// editor shows). They are injected as a list the model must report in
+/// the Problems section, so the document lists what the IDE actually
+/// flags instead of only what the model re-derives from reading the
+/// code. Empty means the IDE reports no errors, and the prompt is
+/// identical to an errors-free analysis.
+///
+/// When `attachments` is non-empty it holds the files the user checked in
+/// the Imports pane, imported by the analyzed file. They are rendered
+/// after the analyzed code as context only: the prompt forbids
+/// referencing their lines or suggesting changes to them, because the
+/// Line N references and the Replace/Insert/Delete steps drive the
+/// IDE's code actions, which can only edit the analyzed file. The
+/// Relationship to other files section describes how the analyzed file
+/// uses each of them. Empty means no files are attached, and that
+/// section says so.
+///
 /// The code is embedded with a 1-based line number prefix on every line,
 /// matching the line numbers the IDE's editor gutter shows. The model must
 /// use those numbers for every line reference, so the references match the
@@ -65,6 +85,8 @@ pub fn analysis_prompt(
     cursor_index: Option<usize>,
     file_content: &str,
     topic: Option<&str>,
+    errors: &[CompilerError],
+    attachments: &[AttachedFile],
 ) -> String {
     let total_lines = file_content.lines().count().max(1);
     // A Markdown code fence (three backticks), built without a literal fence
@@ -106,6 +128,53 @@ If a section has nothing relevant to the topic, say so explicitly instead of inv
         None => String::new(),
     };
 
+    // The compilation/syntax errors the IDE's code analyzer reports for
+    // the file, when there are any. The prompt requires the model to
+    // list every one of them in the Problems section, quoting the
+    // messages faithfully, so the document reports what the IDE actually
+    // flags. Empty means the IDE reports no errors, and no errors block
+    // is injected.
+    let errors_section = if errors.is_empty() {
+        String::new()
+    } else {
+        let error_list = errors
+            .iter()
+            .map(|error| format!("- Line {}: {}", error.line, error.message))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "The IDE's code analyzer currently reports the following compilation/syntax errors in the file:\n{error_list}\n\
+Every one of these errors must appear in the Problems section as a bullet that starts with the error's line number, \
+in addition to the problems you find yourself. Quote the error messages faithfully and never claim the file has no \
+problems while these errors exist.\n\n"
+        )
+    };
+
+    // The files the user attached from the Imports pane, rendered after
+    // the analyzed code. They carry no line-number prefixes, unlike the
+    // analyzed code: the Line N references and the Replace/Insert/Delete
+    // steps must keep targeting the analyzed file (they drive the IDE's
+    // code actions, which can only edit it), and number prefixes on the
+    // attachments would invite the model to reference them.
+    let attachments_section = if attachments.is_empty() {
+        String::new()
+    } else {
+        let blocks = attachments
+            .iter()
+            .map(|file| {
+                format!(
+                    "=== ATTACHED FILE: {} ===\n{}\n=== END ATTACHED FILE ===",
+                    file.name, file.content
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        format!(
+            "\n\nThe user attached the file(s) below from the Imports pane because the analyzed file imports them. \
+They are context for understanding the analyzed file only: every Line N reference and every Replace/Insert/Delete step still targets the analyzed file between BEGIN CODE and END CODE, never an attached file, and no step may change an attached file.\n\n{blocks}"
+        )
+    };
+
     let cursor_section = match cursor_index {
         Some(index) => format!(
             "The cursor is at character index {index}. In this section, mark the segment that contains the cursor by appending **(current)** to its subheading."
@@ -118,6 +187,7 @@ If a section has nothing relevant to the topic, say so explicitly instead of inv
 Start the document directly with its first ## heading. Never wrap the whole document, or any whole section, in a fenced code block or in BEGIN/END-style markers; only the individual code snippets and AI agent prompts described later may be fenced. \
 {topic_section}\
 {guideline_section}\
+{errors_section}\
 The document must contain all sections below, in this order, each introduced by a ## heading with exactly the text afterwards:
 Within the sections, format the content freely with Markdown: use **bold**, *italics*, ### subheadings, bullet and numbered lists, `inline code`, blockquotes and fenced code blocks. \
 Do not use # or ## headings other than the section headings listed above. \
@@ -128,17 +198,26 @@ Sections:
 ## Scope
 Explicitly mention what the topic is, summarizing what it is about. If there is no topic, just omit it.
 
-Also answer all questions in the code below in a bullet point list (each line starts with a '* '), if there are any. \
+Also answer all questions present in the topic or code below in a bullet point list (each line starts with a '* '), if there are any. \
 Note that we are requesting the answer to the question, not the question itself. \
 Do not miss any questions.
 
-## General direction
+## General understanding
 
-### Simple version
-Describe what the user is writing and what the file as a whole accomplishes, but explain it in a way that is easy to understand by an five/ten year old (explain like I'm 5).
+### Simplified
+Describe what the user is writing and the purpose of the file, but explain it in a way that is easy to understand by an five/ten year old (explain like I'm 5).
 
-### Technical version
+### Technical
 Describe what the user is writing and what the file as a whole accomplishes. Be informative, technical and elaborate.
+
+### Explanation of gradually increasing difficulty
+
+Explain what the file does in gradually increasing difficulty from level 1 to level 5 using bullet points for each.
+Level 1: A simple version ELI5 version that uses limited analogy. Very easy to understand.
+...
+Level 5: Full technical jargon with precise wording. May demand domain knowledge.
+
+Each level should be around 3-5 sentences with the detail necessary to understand the general purpose of the file.
 
 ### Graph
 
@@ -147,6 +226,11 @@ matter, not every line. But make it pedagogic / explanatory for a person who is 
 Wrap it in a fenced code block: a line with {fence}, the diagram, then a closing line with {fence}. \
 If the file has no control flow worth visualizing (e.g. data or configuration), write *No flowchart: nothing to
 visualize.* instead.
+
+## Relationship to other files
+The user attached the file(s) listed after the code from the Imports pane, because the analyzed file imports them. \
+For EVERY attached file, write one bullet that starts with the file's name and describes how the analyzed file uses it: what it imports from that file, which functions, types or values it takes from it, and the role that file plays for the analyzed file, like: - prompts.rs: Provides the prompt builders that the file calls. \
+If no files are attached, write *No attached files.*
 
 ## Current functionality
 Split the ENTIRE file into meaningful logical segments; every line of the file must belong to at least one segment, and together the segments must cover the whole file from line 1 through line {total_lines}. \
@@ -176,7 +260,10 @@ Split the steps into exactly two groups, in this order, each introduced by a ###
 Contains the steps that are essential for understanding the overall program - the design decisions and core logic a human should work through personally. \
 Number the steps. For EVERY step, first write a detailed description of how the implementation might look: the approach, the important data structures, the control flow, and why it works. \
 Then add a concrete code snippet in a fenced code block - a line with {fence} (optionally followed by the language name), then the code, then a closing line with {fence} - showing that implementation. \
-The snippet belongs at the step's referenced line: it is inserted at that line, or it replaces the existing code starting at that line. \
+Every step must state what it does to the referenced line by writing one of the words Replace, Insert or Delete right after the line number, like: 1. Line 13: Replace: Refactor the loop to cache the list. \
+Replace means the snippet is the new code for the referenced line: applying the step swaps that line for the snippet. \
+Insert means the snippet is new code placed directly above the referenced line, and the referenced line itself is kept. \
+Delete means the referenced line is removed; the step's fenced code block contains only the word DELETE. \
 Write the snippet in the language of the analyzed file. \
 Every snippet must be a complete, working implementation: NEVER a placeholder, stub or skeleton, and never a comment like 'placeholder', 'TODO' or 'implement logic here' standing in for real code. \
 Steps in this group must NEVER include an AI agent prompt.
@@ -194,7 +281,7 @@ If you have no suggestions at all, write *No suggestions.* and omit both ### sub
 
 BEGIN CODE
 {numbered_code}
-END CODE"
+END CODE{attachments_section}"
     )
 }
 

@@ -38,6 +38,12 @@ const SNAPSHOT_INTERVAL: Duration = Duration::from_millis(100);
 /// completion popup wait for minutes.
 const COMPLETION_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Maximum number of tokens a completion may generate. The previous value
+/// of 256 cut completions off after roughly 30 lines of code, because the
+/// request forbade the model from generating more; 1024 leaves room for a
+/// full multi-line insertion while still bounding latency and cost.
+const COMPLETION_MAX_TOKENS: u16 = 1024;
+
 /// Resolves the base URL of the LLM service's OpenAI-compatible chat
 /// completions endpoint from the environment, so no provider is
 /// assumed: any service that speaks the OpenAI API works - a local
@@ -77,6 +83,34 @@ fn llm_client() -> Client<OpenAIConfig> {
     Client::with_config(config)
 }
 
+/// One compilation/syntax error the IDE's code analyzer reports for the
+/// analyzed file, collected by the IDE when it wrote the trigger file
+/// (see HintsFilePoller.writeTriggerFile on the Java side). The analysis
+/// prompt requires the model to list every one of them in the Problems
+/// section, so the document reports what the IDE actually flags instead
+/// of only what the model re-derives from reading the code.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CompilerError {
+    /// The 1-based line the error is on, matching the line-number prefixes
+    /// the prompt adds to the code and the editor gutter shows.
+    pub line: u32,
+    /// The error message as the IDE shows it in the editor and its
+    /// Problems view.
+    pub message: String,
+}
+
+/// One file the user attached to the analysis from the Imports pane:
+/// its name and its content, capped by the IDE (see attachmentsJson on
+/// the Java side). Sent in the tick trigger file and rendered by the
+/// analysis prompt as context after the analyzed code.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct AttachedFile {
+    /// The file's name (for example "prompts.rs"), used in the prompt.
+    pub name: String,
+    /// The file's content.
+    pub content: String,
+}
+
 /// Analyzes the current file on demand and streams the resulting Markdown
 /// document.
 #[tower_lsp::async_trait]
@@ -88,11 +122,21 @@ pub trait StreamingTickListener: Send + Sync {
     /// `topic` is the optional topic/goal the user set in the IDE's tool
     /// window. When it is set, the analysis views the file through it;
     /// None means a topic-agnostic analysis.
+    ///
+    /// `errors` are the compilation/syntax errors the IDE's code analyzer
+    /// reports for the file; the analysis lists them in its Problems
+    /// section. Empty means the IDE reports none.
+    ///
+    /// `attachments` are the files the user checked in the Imports pane;
+    /// the analysis prompt renders them as context after the analyzed
+    /// code. Empty means none are attached.
     async fn on_tick_stream(
         &self,
         file_content: &str,
         cursor_position: Option<Position>,
         topic: Option<&str>,
+        errors: &[CompilerError],
+        attachments: Vec<AttachedFile>,
     ) -> (TickSnapshot, mpsc::Receiver<TickSnapshot>);
 }
 
@@ -133,6 +177,8 @@ impl StreamingTickListener for OllamaTickListener {
         file_content: &str,
         cursor_position: Option<Position>,
         topic: Option<&str>,
+        errors: &[CompilerError],
+        attachments: Vec<AttachedFile>,
     ) -> (TickSnapshot, mpsc::Receiver<TickSnapshot>) {
         let cursor_index = cursor_position.map(|position| {
             let index = position_to_char_index(file_content, position);
@@ -157,6 +203,8 @@ impl StreamingTickListener for OllamaTickListener {
         let file_content_owned = file_content.to_string();
         let cursor_index_for_task = cursor_index;
         let topic_for_task = topic.map(|topic| topic.to_string());
+        let errors_for_task = errors.to_vec();
+        let attachments_for_task = attachments;
         let client = self.client.clone();
         let model = self.model.clone();
         tokio::spawn(async move {
@@ -164,6 +212,8 @@ impl StreamingTickListener for OllamaTickListener {
                 &file_content_owned,
                 cursor_index_for_task,
                 topic_for_task,
+                errors_for_task,
+                attachments_for_task,
                 client,
                 model,
                 tx,
@@ -189,7 +239,19 @@ impl StreamingTickListener for OllamaTickListener {
 /// ("```rust ... ```") even though the prompt forbids fences; inserting
 /// those fence lines into the editor causes compilation errors, so
 /// strip_code_fence removes them before the text is returned.
-pub async fn complete(prompt: &str) -> anyhow::Result<String> {
+///
+/// The model also regularly starts its answer by re-generating the text
+/// that already ends at the caret, even though the prompt forbids
+/// repeating existing code: asked to complete "margin-right: 6" it
+/// returns "margin-right: 6px", which the IDE would insert as
+/// "margin-right: 6margin-right: 6px". strip_repeated_prefix removes
+/// that duplicated leading portion; the document and the caret
+/// position say what already precedes the caret.
+pub async fn complete(
+    prompt: &str,
+    document: &str,
+    position: Position,
+) -> anyhow::Result<String> {
     let client = llm_client();
     let model = llm_model();
 
@@ -205,7 +267,7 @@ pub async fn complete(prompt: &str) -> anyhow::Result<String> {
                 .content(prompt)
                 .build()?,
         ])
-        .max_tokens(256u16)
+        .max_tokens(COMPLETION_MAX_TOKENS)
         .temperature(0.1_f32)
         .top_p(0.8_f32)
         .build()?;
@@ -224,7 +286,16 @@ pub async fn complete(prompt: &str) -> anyhow::Result<String> {
         .first()
         .and_then(|c| c.message.content.clone())
         .unwrap_or_default();
-    Ok(strip_code_fence(&content))
+    let completion = strip_code_fence(&content);
+    let prefix = text_before_caret(document, position);
+    let stripped = strip_repeated_prefix(&prefix, &completion);
+    if stripped != completion {
+        log_message(&format!(
+            "[completion] stripped {} leading char(s) that duplicated the text before the caret",
+            completion.chars().count() - stripped.chars().count()
+        ));
+    }
+    Ok(stripped)
 }
 
 /// Removes the Markdown code fence the model often wraps a completion in
@@ -255,6 +326,54 @@ fn strip_code_fence(text: &str) -> String {
     lines.join("\n").trim().to_string()
 }
 
+/// Returns the document text that lies before the caret: every complete
+/// line above the caret line plus the caret line's content up to the
+/// caret column. LSP columns count UTF-16 code units, so the column is
+/// consumed in UTF-16 units; a column that would split a surrogate pair
+/// includes its whole character.
+fn text_before_caret(document: &str, position: Position) -> String {
+    let mut prefix = String::new();
+    for (index, line) in document.lines().enumerate() {
+        if index as u32 == position.line {
+            let mut units = 0u32;
+            for character in line.chars() {
+                if units >= position.character {
+                    break;
+                }
+                units += character.len_utf16() as u32;
+                prefix.push(character);
+            }
+            return prefix;
+        }
+        prefix.push_str(line);
+        prefix.push('\n');
+    }
+    prefix
+}
+
+/// Strips the leading portion of a completion that duplicates the text
+/// immediately before the caret. Completion models are trained to
+/// continue a prefix and regularly re-generate the text ending at the
+/// caret despite the prompt forbidding it: asked to complete
+/// "margin-right: 6" the model returns "margin-right: 6px", which the
+/// IDE would insert as "margin-right: 6margin-right: 6px". Whatever
+/// suffix of the text before the caret the completion starts with is
+/// such a repetition, so the longest overlap is removed and only the
+/// genuinely new text ("px") remains. A completion that is nothing but
+/// the repetition collapses to an empty string, which the caller
+/// treats as "no completion".
+fn strip_repeated_prefix(prefix: &str, completion: &str) -> String {
+    let prefix: Vec<char> = prefix.chars().collect();
+    let completion: Vec<char> = completion.chars().collect();
+    let max = prefix.len().min(completion.len());
+    for overlap in (1..=max).rev() {
+        if prefix.ends_with(&completion[..overlap]) {
+            return completion[overlap..].iter().collect();
+        }
+    }
+    completion.iter().collect()
+}
+
 /// Runs the single analysis inference against the LLM service's
 /// streaming endpoint and sends the Markdown document as it is
 /// generated: every SNAPSHOT_INTERVAL the text accumulated so far goes
@@ -272,10 +391,19 @@ fn strip_code_fence(text: &str) -> String {
 /// (crate::write_error_file), so the tool window's status line shows
 /// the real error instead of only the generic fallback text that the
 /// analysis file receives.
+///
+/// The `errors` are the compilation/syntax errors the IDE's code
+/// analyzer reports for the file; the prompt (prompts::analysis_prompt)
+/// requires the model to list them in the Problems section.
+///
+/// The `attachments` are the files the user checked in the Imports
+/// pane; the prompt renders them as context after the analyzed code.
 async fn run_ollama_work(
     file_content: &str,
     cursor_index: Option<usize>,
     topic: Option<String>,
+    errors: Vec<CompilerError>,
+    attachments: Vec<AttachedFile>,
     client: Client<OpenAIConfig>,
     model: String,
     tx: mpsc::Sender<TickSnapshot>,
@@ -290,11 +418,23 @@ async fn run_ollama_work(
             topic
         ));
     }
+    if !attachments.is_empty() {
+        log_message(&format!(
+            "[tick llm] analyzing with {} attached file(s)",
+            attachments.len()
+        ));
+    }
 
     // The analysis prompt lives in prompts.rs and is shared with
     // LlmTickListener, so there is a single source of truth for the
     // Markdown document format.
-    let analysis_prompt = prompts::analysis_prompt(cursor_index, file_content, topic.as_deref());
+    let analysis_prompt = prompts::analysis_prompt(
+        cursor_index,
+        file_content,
+        topic.as_deref(),
+        &errors,
+        &attachments,
+    );
 
     let request = match build_analysis_request(&model, &analysis_prompt) {
         Ok(request) => request,
