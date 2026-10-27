@@ -11,7 +11,7 @@ import com.intellij.ui.content.ContentManager;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Toolbar action that shows the Improve tab of the Antiviber
+ * Toolbar action that shows the Relate tab of the Antiviber
  * Interpretation tool window, whose top part manages the files attached
  * to the analysis: the imports of the current file the local scan found,
  * the files the user added manually, and which of them are attached.
@@ -25,7 +25,7 @@ public class OpenImportsPaneAction extends AnAction {
         // A folder icon, so the button reads as "a list of files" at a
         // glance and stays distinct from the reload action's refresh
         // icon and the settings action's gear icon.
-        super("Imports", "Show the Improve tab, which manages the files attached to the analysis above the problems and recommendations", AllIcons.Nodes.Folder);
+        super("Imports", "Show the Relate tab, which manages the files attached to the analysis above the relationships to other files", AllIcons.Nodes.Folder);
     }
 
     @Override
@@ -42,7 +42,7 @@ public class OpenImportsPaneAction extends AnAction {
         toolWindow.show(null);
         ContentManager contentManager = toolWindow.getContentManager();
         for (Content content : contentManager.getContents()) {
-            if ("Improve".equals(content.getDisplayName())) {
+            if ("Relate".equals(content.getDisplayName())) {
                 contentManager.setSelectedContent(content);
                 return;
             }

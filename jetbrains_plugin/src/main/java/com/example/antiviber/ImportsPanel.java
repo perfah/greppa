@@ -18,7 +18,7 @@ import java.util.Objects;
 
 /**
  * The Imports pane of the Antiviber Interpretation tool window (the
- * second content; see HintsToolWindowFactory and
+ * strip at the top of the Relate tab; see HintsToolWindowFactory and
  * OpenImportsPaneAction).
  *
  * It lists the local files the currently selected file imports plus the

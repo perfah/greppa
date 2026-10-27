@@ -25,28 +25,28 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         // The three tabs render the same analysis document, each through
         // its own section filter (see HintsService.filterSections):
         // Interpret shows the understanding sections, Improve the
-        // problems and recommendations below the attached-files
-        // management, and Relate the relationships to other files.
+        // problems and recommendations, and Relate the relationships to
+        // other files below the attached-files management.
         HintsPanel interpretPanel = new HintsPanel(
                 List.of("Scope", "General understanding", "Current functionality"));
         Content interpretContent = ContentFactory.getInstance()
                 .createContent(interpretPanel, "Interpret", false);
 
-        ImportsPanel importsPanel = new ImportsPanel();
         HintsPanel improvePanel = new HintsPanel(List.of("Scope", "Problems", "Recommendations"));
         Content improveContent = ContentFactory.getInstance()
-                .createContent(buildImproveTab(importsPanel, improvePanel), "Improve", false);
+                .createContent(improvePanel, "Improve", false);
 
+        ImportsPanel importsPanel = new ImportsPanel();
         HintsPanel relatePanel = new HintsPanel(List.of("Scope", "Relationships to other files"));
         Content relateContent = ContentFactory.getInstance()
-                .createContent(relatePanel, "Relate", false);
+                .createContent(buildRelateTab(importsPanel, relatePanel), "Relate", false);
 
         toolWindow.getContentManager().addContent(interpretContent);
         toolWindow.getContentManager().addContent(improveContent);
         toolWindow.getContentManager().addContent(relateContent);
 
         // The Imports action sits between Reload and Settings, so the
-        // button that opens the Improve tab (whose top manages the files
+        // button that opens the Relate tab (whose top manages the files
         // attached to the analysis) is directly left of the settings
         // gear.
         List<AnAction> titleActions = Arrays.asList(
@@ -109,17 +109,17 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
     }
 
     /**
-     * Builds the Improve tab: the attached-files management (the former
-     * Imports pane) as a strip at the top, the problems and
-     * recommendations markdown below it. The strip's height is capped so
-     * the markdown keeps the bulk of the tab; the imports list scrolls
+     * Builds the Relate tab: the attached-files management (the former
+     * Imports pane) as a strip at the top, the relationships to other
+     * files markdown below it. The strip's height is capped so the
+     * markdown keeps the bulk of the tab; the imports list scrolls
      * within the cap.
      */
-    private static JComponent buildImproveTab(ImportsPanel importsPanel, HintsPanel improvePanel) {
+    private static JComponent buildRelateTab(ImportsPanel importsPanel, HintsPanel relatePanel) {
         importsPanel.setPreferredSize(new Dimension(0, 220));
         JPanel tab = new JPanel(new BorderLayout(0, 0));
         tab.add(importsPanel, BorderLayout.NORTH);
-        tab.add(improvePanel, BorderLayout.CENTER);
+        tab.add(relatePanel, BorderLayout.CENTER);
         return tab;
     }
 }
