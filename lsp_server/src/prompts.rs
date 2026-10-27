@@ -209,7 +209,7 @@ If neither a topic nor questions in the file exist, omit this section entirely.
 ## Explanation
 
 ### Simplified
-Describe what the user is writing and the purpose of the file, but explain it in a way that is easy to understand by an five/ten year old (explain like I'm 5).
+Describe what the user is writing and the purpose of the file, but explain it in a way that is easy to understand by an five/ten year old (explain like i'm 5).
 
 ### Technical
 Describe what the user is writing and what the file as a whole accomplishes. Be informative, technical and elaborate.
@@ -275,7 +275,8 @@ Be especially attentive if the user is hinting that they need help with somethin
 For example: If they write 'I want to implement a peer-to-peer network using rustp2p' then 'Missing implementation for peer-to-peer network' should be considered a problem.
 
 ## Recommendations
-Describe the suggested approaches for solving the problems listed in the Problems section.
+Describe the suggested approaches for solving the problems listed in the Problems section and for advancing the Suggested direction above. \
+Every step must either work towards the Suggested direction or resolve one of the listed problems, and together the steps must cover both: never suggest steps that pull in a different direction than the Suggested direction, and never leave the Suggested direction without steps working towards it.
 Here it's important to be elaborate: give each step real detail and reasoning.
 This is the most important part of the review and must guide the user on what to do next. \
 Every step in both groups below must start with the exact line number where the change happens: the line at which the step's code is inserted, or the FIRST line of the existing code that the step's code replaces. \
