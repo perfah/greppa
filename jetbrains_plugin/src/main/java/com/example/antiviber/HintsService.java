@@ -464,19 +464,6 @@ public class HintsService {
     }
 
     /**
-     * Returns the Markdown analysis document for the currently selected
-     * file, reduced to the sections the given names select - the variant
-     * the tool window's tabs use, where each tab shows its own subset of
-     * the same analysis (see HintsToolWindowFactory). The full merged
-     * document is still what the merge, the history and the poller work
-     * with, so the streaming behavior is unchanged; only the document
-     * handed to the caller is filtered.
-     */
-    public static synchronized String getMarkdown(@NotNull List<String> sectionNames) {
-        return filterSections(getMarkdown(), sectionNames);
-    }
-
-    /**
      * Reduces a Markdown document to the sections the given names select:
      * every ## section whose heading contains one of the names
      * (case-insensitive), in document order. When none of the named
@@ -501,6 +488,33 @@ public class HintsService {
             }
         }
         return matched.length() == 0 ? sections.preamble : matched.toString();
+    }
+
+    /**
+     * Reduces a Markdown document to the sections the given names do NOT
+     * select: every ## section whose heading contains none of the names
+     * (case-insensitive), in document order - the complement of
+     * filterSections, so the Etc tab can show the sections no other
+     * tab's filter catches (see HintsToolWindowFactory). Like
+     * filterSections, the text before the first ## heading is returned
+     * when the selection is empty, so a document that is still the
+     * "Generating interpretation..." placeholder shows that instead of
+     * the panel's empty-state card. An empty or null name list returns
+     * the document unchanged.
+     */
+    public static String filterUnmatchedSections(@Nullable String markdown, @NotNull List<String> sectionNames) {
+        String document = markdown == null ? "" : markdown;
+        if (sectionNames == null || sectionNames.isEmpty()) {
+            return document;
+        }
+        Sections sections = splitSections(document);
+        StringBuilder unmatched = new StringBuilder(document.length());
+        for (Section section : sections.sections) {
+            if (!headingMatches(section.heading, sectionNames)) {
+                unmatched.append(section.text);
+            }
+        }
+        return unmatched.length() == 0 ? sections.preamble : unmatched.toString();
     }
 
     /**

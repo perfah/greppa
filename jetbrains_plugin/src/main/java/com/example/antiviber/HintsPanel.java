@@ -144,10 +144,23 @@ public class HintsPanel extends JPanel {
      * same document through different filters.
      */
     private final List<String> sectionNames;
+    /**
+     * True when the panel shows the sections the names do NOT select -
+     * the complement view the Etc tab uses, so the sections no tab's
+     * filter catches are visible and the tab lists can be adjusted to
+     * the headings the server actually writes; see
+     * HintsService.filterUnmatchedSections.
+     */
+    private final boolean unmatchedOnly;
 
     public HintsPanel(List<String> sectionNames) {
+        this(sectionNames, false);
+    }
+
+    public HintsPanel(List<String> sectionNames, boolean unmatchedOnly) {
         super(new BorderLayout());
         this.sectionNames = List.copyOf(sectionNames);
+        this.unmatchedOnly = unmatchedOnly;
         setBorder(new EmptyBorder(8, 8, 8, 8));
 
         // The analysis arrives as Markdown; it is converted to HTML by
@@ -470,12 +483,15 @@ public class HintsPanel extends JPanel {
             // The document to display: the selected previous version while
             // the user is browsing the history, otherwise the live document
             // (the merge of the last complete document and the streaming
-            // partial one). Both are reduced to this panel's sections, so
-            // every tab shows only its own part of the analysis.
+            // partial one). Both are reduced to this panel's view - the
+            // sections the names select, or the sections they leave out for
+            // the Etc tab - so every tab shows only its own part of the
+            // analysis.
             int selectedVersion = historyCombo.getSelectedIndex() - 1;
-            String markdown = selectedVersion >= 0 && selectedVersion < history.size()
-                    ? HintsService.filterSections(history.get(selectedVersion), sectionNames)
-                    : HintsService.getMarkdown(sectionNames);
+            String document = selectedVersion >= 0 && selectedVersion < history.size()
+                    ? history.get(selectedVersion)
+                    : HintsService.getMarkdown();
+            String markdown = filterDocument(document);
 
             // Skip redundant refreshes: the same Markdown often arrives
             // repeatedly (selection changes, re-reads of unchanged files),
@@ -522,6 +538,17 @@ public class HintsPanel extends JPanel {
             // been laid out.
             SwingUtilities.invokeLater(() -> viewport.setViewPosition(viewPosition));
         });
+    }
+
+    /**
+     * Returns the document reduced to this panel's view: the sections the
+     * names select, or - for the Etc tab - the sections they do not (see
+     * HintsService.filterUnmatchedSections).
+     */
+    private String filterDocument(String document) {
+        return unmatchedOnly
+                ? HintsService.filterUnmatchedSections(document, sectionNames)
+                : HintsService.filterSections(document, sectionNames);
     }
 
     /**

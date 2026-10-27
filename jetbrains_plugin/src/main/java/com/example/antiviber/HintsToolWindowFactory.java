@@ -13,6 +13,7 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -22,28 +23,48 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
-        // The three tabs render the same analysis document, each through
-        // its own section filter (see HintsService.filterSections):
-        // Interpret shows the understanding sections, Improve the
-        // problems and recommendations, and Relate the relationships to
-        // other files below the attached-files management.
-        HintsPanel interpretPanel = new HintsPanel(
-                List.of("Scope", "General understanding", "Current functionality"));
+        // The tabs render the same analysis document, each through its own
+        // section filter (see HintsService.filterSections): Interpret shows
+        // the understanding sections, Improve the problems and
+        // recommendations, and Relate the relationships to other files
+        // below the attached-files management. The Etc tab shows the
+        // sections none of the three filters catches (see
+        // HintsService.filterUnmatchedSections), so the headings the
+        // server actually writes are visible when a tab seems to be
+        // missing its section.
+        List<String> interpretSections = List.of("Scope", "General understanding", "Current functionality");
+        HintsPanel interpretPanel = new HintsPanel(interpretSections);
         Content interpretContent = ContentFactory.getInstance()
                 .createContent(interpretPanel, "Interpret", false);
 
-        HintsPanel improvePanel = new HintsPanel(List.of("Scope", "Problems", "Recommendations"));
+        List<String> improveSections = List.of("Scope", "Problems", "Recommendations");
+        HintsPanel improvePanel = new HintsPanel(improveSections);
         Content improveContent = ContentFactory.getInstance()
                 .createContent(improvePanel, "Improve", false);
 
         ImportsPanel importsPanel = new ImportsPanel();
-        HintsPanel relatePanel = new HintsPanel(List.of("Scope", "Relationships to other files"));
+        List<String> relateSections = List.of("Scope", "Relationships to other files");
+        HintsPanel relatePanel = new HintsPanel(relateSections);
         Content relateContent = ContentFactory.getInstance()
                 .createContent(buildRelateTab(importsPanel, relatePanel), "Relate", false);
+
+        // The Etc tab's filter is the complement of the three lists above,
+        // derived from them so it cannot drift when a list is adjusted:
+        // every ## section whose heading matches none of them appears
+        // here. When the server writes a heading a tab's list does not
+        // contain (the match is a substring test; see
+        // HintsService.headingMatches), the section shows up in Etc
+        // instead of the tab it was meant for.
+        List<String> matchedSectionNames = new ArrayList<>(interpretSections);
+        matchedSectionNames.addAll(improveSections);
+        matchedSectionNames.addAll(relateSections);
+        HintsPanel etcPanel = new HintsPanel(matchedSectionNames, true);
+        Content etcContent = ContentFactory.getInstance().createContent(etcPanel, "Etc", false);
 
         toolWindow.getContentManager().addContent(interpretContent);
         toolWindow.getContentManager().addContent(improveContent);
         toolWindow.getContentManager().addContent(relateContent);
+        toolWindow.getContentManager().addContent(etcContent);
 
         // The Imports action sits between Reload and Settings, so the
         // button that opens the Relate tab (whose top manages the files
@@ -68,7 +89,8 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
                 interpretPanel::refresh,
                 importsPanel::refresh,
                 improvePanel::refresh,
-                relatePanel::refresh);
+                relatePanel::refresh,
+                etcPanel::refresh);
         for (Runnable listener : refreshListeners) {
             HintsService.addListener(listener);
         }
