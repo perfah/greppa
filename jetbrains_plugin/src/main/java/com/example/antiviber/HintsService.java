@@ -18,6 +18,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -460,6 +461,63 @@ public class HintsService {
                 + (base == null ? "none" : base.length() + " chars")
                 + " merged=" + merged.length() + " chars");
         return merged;
+    }
+
+    /**
+     * Returns the Markdown analysis document for the currently selected
+     * file, reduced to the sections the given names select - the variant
+     * the tool window's tabs use, where each tab shows its own subset of
+     * the same analysis (see HintsToolWindowFactory). The full merged
+     * document is still what the merge, the history and the poller work
+     * with, so the streaming behavior is unchanged; only the document
+     * handed to the caller is filtered.
+     */
+    public static synchronized String getMarkdown(@NotNull List<String> sectionNames) {
+        return filterSections(getMarkdown(), sectionNames);
+    }
+
+    /**
+     * Reduces a Markdown document to the sections the given names select:
+     * every ## section whose heading contains one of the names
+     * (case-insensitive), in document order. When none of the named
+     * sections is present, the text before the first ## heading is
+     * returned instead, so a document that is still the "Generating
+     * interpretation..." placeholder keeps the tabs showing the
+     * placeholder rather than their empty-state card. Public so
+     * HintsPanel filters the history entries exactly like the live
+     * document (see getHistoryForUri). An empty or null name list returns
+     * the document unchanged.
+     */
+    public static String filterSections(@Nullable String markdown, @NotNull List<String> sectionNames) {
+        if (sectionNames == null || sectionNames.isEmpty()) {
+            return markdown == null ? "" : markdown;
+        }
+        String document = markdown == null ? "" : markdown;
+        Sections sections = splitSections(document);
+        StringBuilder matched = new StringBuilder(document.length());
+        for (Section section : sections.sections) {
+            if (headingMatches(section.heading, sectionNames)) {
+                matched.append(section.text);
+            }
+        }
+        return matched.length() == 0 ? sections.preamble : matched.toString();
+    }
+
+    /**
+     * Returns whether the heading line names one of the selected
+     * sections. The match is a case-insensitive substring test, so the
+     * tab definitions need not repeat the headings verbatim:
+     * "Recommendations" also matches a "## Specific recommendations"
+     * heading.
+     */
+    private static boolean headingMatches(@NotNull String heading, @NotNull List<String> sectionNames) {
+        String lower = heading.toLowerCase(Locale.ROOT);
+        for (String name : sectionNames) {
+            if (lower.contains(name.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static synchronized void addListener(Runnable listener) {

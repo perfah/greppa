@@ -9,6 +9,10 @@ import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import org.jetbrains.annotations.NotNull;
 
+import javax.swing.JComponent;
+import javax.swing.JPanel;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.util.Arrays;
 import java.util.List;
 
@@ -18,16 +22,33 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
-        HintsPanel panel = new HintsPanel();
-        Content content = ContentFactory.getInstance().createContent(panel, "Interpretation", false);
+        // The three tabs render the same analysis document, each through
+        // its own section filter (see HintsService.filterSections):
+        // Interpret shows the understanding sections, Improve the
+        // problems and recommendations below the attached-files
+        // management, and Relate the relationships to other files.
+        HintsPanel interpretPanel = new HintsPanel(
+                List.of("Scope", "General understanding", "Current functionality"));
+        Content interpretContent = ContentFactory.getInstance()
+                .createContent(interpretPanel, "Interpret", false);
+
         ImportsPanel importsPanel = new ImportsPanel();
-        Content importsContent = ContentFactory.getInstance().createContent(importsPanel, "Imports", false);
-        toolWindow.getContentManager().addContent(content);
-        toolWindow.getContentManager().addContent(importsContent);
+        HintsPanel improvePanel = new HintsPanel(List.of("Scope", "Problems", "Recommendations"));
+        Content improveContent = ContentFactory.getInstance()
+                .createContent(buildImproveTab(importsPanel, improvePanel), "Improve", false);
+
+        HintsPanel relatePanel = new HintsPanel(List.of("Scope", "Relationships to other files"));
+        Content relateContent = ContentFactory.getInstance()
+                .createContent(relatePanel, "Relate", false);
+
+        toolWindow.getContentManager().addContent(interpretContent);
+        toolWindow.getContentManager().addContent(improveContent);
+        toolWindow.getContentManager().addContent(relateContent);
 
         // The Imports action sits between Reload and Settings, so the
-        // button that opens the Imports pane is directly left of the
-        // settings gear.
+        // button that opens the Improve tab (whose top manages the files
+        // attached to the analysis) is directly left of the settings
+        // gear.
         List<AnAction> titleActions = Arrays.asList(
                 new RefreshHintsAction(),
                 new OpenImportsPaneAction(),
@@ -43,10 +64,14 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         // removed nothing and the panels kept receiving notifications
         // forever after their content was removed. The panels do not
         // register themselves either, so each update refreshes them exactly once.
-        Runnable refreshListener = panel::refresh;
-        HintsService.addListener(refreshListener);
-        Runnable importsRefreshListener = importsPanel::refresh;
-        HintsService.addListener(importsRefreshListener);
+        List<Runnable> refreshListeners = List.of(
+                interpretPanel::refresh,
+                importsPanel::refresh,
+                improvePanel::refresh,
+                relatePanel::refresh);
+        for (Runnable listener : refreshListeners) {
+            HintsService.addListener(listener);
+        }
 
         // Register the per-project listeners here instead of from
         // AntiviberProjectManagerListener. That class hooked
@@ -76,9 +101,25 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
                 if (poller != null) {
                     poller.stop();
                 }
-                HintsService.removeListener(refreshListener);
-                HintsService.removeListener(importsRefreshListener);
+                for (Runnable listener : refreshListeners) {
+                    HintsService.removeListener(listener);
+                }
             }
         });
+    }
+
+    /**
+     * Builds the Improve tab: the attached-files management (the former
+     * Imports pane) as a strip at the top, the problems and
+     * recommendations markdown below it. The strip's height is capped so
+     * the markdown keeps the bulk of the tab; the imports list scrolls
+     * within the cap.
+     */
+    private static JComponent buildImproveTab(ImportsPanel importsPanel, HintsPanel improvePanel) {
+        importsPanel.setPreferredSize(new Dimension(0, 220));
+        JPanel tab = new JPanel(new BorderLayout(0, 0));
+        tab.add(importsPanel, BorderLayout.NORTH);
+        tab.add(improvePanel, BorderLayout.CENTER);
+        return tab;
     }
 }

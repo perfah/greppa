@@ -137,8 +137,17 @@ public class HintsPanel extends JPanel {
      */
     private List<String> codeBlocks = new ArrayList<>();
 
-    public HintsPanel() {
+    /**
+     * The sections of the analysis this panel shows, matched against the
+     * document's ## headings (see HintsService.filterSections). Every tab
+     * of the tool window passes its own subset, so all tabs render the
+     * same document through different filters.
+     */
+    private final List<String> sectionNames;
+
+    public HintsPanel(List<String> sectionNames) {
         super(new BorderLayout());
+        this.sectionNames = List.copyOf(sectionNames);
         setBorder(new EmptyBorder(8, 8, 8, 8));
 
         // The analysis arrives as Markdown; it is converted to HTML by
@@ -375,9 +384,27 @@ public class HintsPanel extends JPanel {
     }
 
     /**
+     * Syncs the topic field with the stored topic. The topic is global
+     * (HintsService) while every tab has its own field, so a topic set on
+     * one tab must appear in the other tabs' fields too. The field is
+     * skipped while it has focus, so a refresh never discards text the
+     * user is typing before it is applied.
+     */
+    private void syncTopicField() {
+        if (topicField.hasFocus()) {
+            return;
+        }
+        String stored = HintsService.getTopic();
+        if (!Objects.equals(topicField.getText(), stored)) {
+            topicField.setText(stored);
+        }
+    }
+
+    /**
      * Sets the pause button's selection and label from the current pause
-     * state, so a panel recreated while paused shows "Unpause" instead of
-     * a selected button still reading "Pause".
+     * state. Called from refresh, so a panel recreated while paused shows
+     * "Unpause" instead of a selected button still reading "Pause", and
+     * the tabs stay consistent when the pause is toggled on another tab.
      */
     private void syncPauseButton() {
         boolean paused = HintsService.isPaused();
@@ -409,6 +436,15 @@ public class HintsPanel extends JPanel {
 
     public void refresh() {
         SwingUtilities.invokeLater(() -> {
+            // The topic and the pause state are global (HintsService), but
+            // every tab has its own panel with its own copy of the controls;
+            // sync them on every refresh so a topic set or a pause toggled
+            // on one tab is reflected on the other tabs. The topic field is
+            // skipped while focused, so a refresh never discards text the
+            // user is typing before it is applied.
+            syncPauseButton();
+            syncTopicField();
+
             // The server-reported error is handled before the unchanged-
             // Markdown early return: an error can arrive while the document
             // stays unchanged (the failed analysis still wrote its fallback
@@ -434,11 +470,12 @@ public class HintsPanel extends JPanel {
             // The document to display: the selected previous version while
             // the user is browsing the history, otherwise the live document
             // (the merge of the last complete document and the streaming
-            // partial one).
+            // partial one). Both are reduced to this panel's sections, so
+            // every tab shows only its own part of the analysis.
             int selectedVersion = historyCombo.getSelectedIndex() - 1;
             String markdown = selectedVersion >= 0 && selectedVersion < history.size()
-                    ? history.get(selectedVersion)
-                    : HintsService.getMarkdown();
+                    ? HintsService.filterSections(history.get(selectedVersion), sectionNames)
+                    : HintsService.getMarkdown(sectionNames);
 
             // Skip redundant refreshes: the same Markdown often arrives
             // repeatedly (selection changes, re-reads of unchanged files),
