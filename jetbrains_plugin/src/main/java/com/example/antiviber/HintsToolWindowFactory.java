@@ -25,14 +25,14 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         // The tabs render the same analysis document, each through its own
         // section filter (see HintsService.filterSections): Interpret shows
-        // the understanding sections, Improve the problems and
-        // recommendations, and Relate the relationships to other files
-        // below the attached-files management. The Etc tab shows the
-        // sections none of the three filters catches (see
+        // the understanding sections (Explanation, Parts), Improve the
+        // problems and recommendations, and Relate the relationships to
+        // other files below the attached-files management. The Etc tab
+        // shows the sections none of the three filters catches (see
         // HintsService.filterUnmatchedSections), so the headings the
         // server actually writes are visible when a tab seems to be
         // missing its section.
-        List<String> interpretSections = List.of("Scope", "General understanding", "Current functionality");
+        List<String> interpretSections = List.of("Scope", "General understanding", "Current functionality", "Explanation", "Parts");
         HintsPanel interpretPanel = new HintsPanel(interpretSections);
         Content interpretContent = ContentFactory.getInstance()
                 .createContent(interpretPanel, "Interpret", false);
@@ -43,7 +43,11 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
                 .createContent(improvePanel, "Improve", false);
 
         ImportsPanel importsPanel = new ImportsPanel();
-        List<String> relateSections = List.of("Scope", "Relationships to other files");
+        // "Relationship", not "Relationships to other files": the analysis
+        // prompt (prompts.rs) asks for the singular "## Relationship to
+        // other files" heading, and the shorter name also matches a plural
+        // heading in case the model drifts; no other section can match it.
+        List<String> relateSections = List.of("Scope", "Relationship");
         HintsPanel relatePanel = new HintsPanel(relateSections);
         Content relateContent = ContentFactory.getInstance()
                 .createContent(buildRelateTab(importsPanel, relatePanel), "Relate", false);
