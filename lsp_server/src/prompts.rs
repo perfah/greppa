@@ -117,7 +117,25 @@ If a section bears no relevance to the topic, say so explicitly instead of inven
         None => String::new(),
     };
 
-    let topic_simple = topic.unwrap_or("NO TOPIC");
+    // The Scope section's instructions, built per case so the prompt never
+    // contains a placeholder the model could echo into the document. The
+    // previous wording described both cases in one template with the topic
+    // substituted into the instruction text ("Explicitly describe topic
+    // NO TOPIC unless it says 'NO TOPIC'..."), and the model copied that
+    // instruction text verbatim into the document instead of following it.
+    // Built per case, the no-topic prompt never mentions a topic at all,
+    // and the with-topic prompt names the real topic.
+    let scope_section = match topic {
+        Some(topic) => format!(
+            "## Scope\n\
+Open with one paragraph about the topic '{topic}': describe it, or answer it directly if the topic itself is a question.\n\
+Follow with a bullet list (each line starts with '* ') answering every question found in the topic or in the code below - the answers, not the questions. Omit the list when there are no questions.\n"
+        ),
+        None => "## Scope\n\
+Answer every question found in the code below in a bullet list where each line starts with '* ' - the answers, not the questions.\n\
+When the code contains no questions, omit this section entirely, heading included.\n"
+            .to_string(),
+    };
 
     // The user's free-text standing instructions from the settings, when
     // configured. Injected as its own paragraph right after the topic, so
@@ -191,21 +209,14 @@ Start the document directly with its first ## heading. Never wrap the whole docu
 {guideline_section}\
 
 The document must contain all sections below, in this order, each introduced by a ## heading with exactly the text afterwards:
+The text under each heading below tells you what to write; it is never content to copy into the document.
 Within the sections, format the content freely with Markdown: use **bold**, *italics*, ### subheadings, bullet and numbered lists, `inline code`, blockquotes and fenced code blocks. \
 Do not use # or ## headings other than the section headings listed above. \
 Separate every ## section from the next with a horizontal rule: directly before every ## heading except the first one, put a line containing only --- with an empty line before and after it.
 
 Sections:
 
-## Scope
-This section is optional. It may contain the following items depending on what is present:
-
-Optional first paragraph: Explicitly describe topic {topic_simple} unless it says 'NO TOPIC', in which case you omit this paragraph. Otherwise, if it is a question, answer it directly.
-Optional second paragraph: Questions in file. Answer all questions present in the topic or code below in a bullet point list (each line starts with a '* '), if there are any. \
-Note that we are requesting the answer to the question, not the question itself. Do not miss any questions.
-
-If neither a topic nor questions in the file exist, omit this section entirely.
-
+{scope_section}
 ## Explanation
 
 ### Simplified
