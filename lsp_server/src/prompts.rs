@@ -236,6 +236,15 @@ The user attached the file(s) listed after the code from the Imports pane, becau
 For EVERY attached file, write one bullet that starts with the file's name and describes how the analyzed file uses it: what it imports from that file, which functions, types or values it takes from it, and the role that file plays for the analyzed file, like: - prompts.rs: Provides the prompt builders that the file calls. \
 If no files are attached, write *No attached files.*
 
+### Diagram
+
+Create a compact flowchart in ASCII art showing how the analyzed file relates to the attached files: \
+the analyzed file as one node, every attached file as its own node, and labeled arrows between them for what flows where: \
+what the analyzed file imports from each file, and which functions, types or values it takes from it. \
+Make it pedagogic / explanatory for a person who is new to what the file is about. \
+Wrap it in a fenced code block: a line with {fence}, the diagram, then a closing line with {fence}. \
+If no files are attached, write *No flowchart: nothing to visualize.* instead.
+
 ## Parts
 Split the ENTIRE file into meaningful logical segments; every line of the file must belong to at least one segment, and together the segments must cover the whole file from line 1 through line {total_lines}. \
 Give each segment a ### subheading that ends with its 1-based inclusive line range, like: ### Class declaration and fields (Lines 5-12). \
