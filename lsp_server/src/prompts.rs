@@ -112,10 +112,12 @@ pub fn analysis_prompt(
         Some(topic) => format!(
             "The user has set the following topic for this review: '{topic}'. \
 View the entire document through the lens of this topic: in every section, prioritize what is relevant to it. \
-If a section has nothing relevant to the topic, say so explicitly instead of inventing relevance.\n\n"
+If a section bears no relevance to the topic, say so explicitly instead of inventing relevance.\n\n"
         ),
         None => String::new(),
     };
+
+    let topic_simple = topic.unwrap_or("NO TOPIC");
 
     // The user's free-text standing instructions from the settings, when
     // configured. Injected as its own paragraph right after the topic, so
@@ -144,9 +146,9 @@ If a section has nothing relevant to the topic, say so explicitly instead of inv
             .join("\n");
         format!(
             "The IDE's code analyzer currently reports the following compilation/syntax errors in the file:\n{error_list}\n\
-Every one of these errors must appear in the Problems section as a bullet that starts with the error's line number, \
+Every one of these errors should appear as bullets that starts with the error's line number, \
 in addition to the problems you find yourself. Quote the error messages faithfully and never claim the file has no \
-problems while these errors exist.\n\n"
+problems while these errors exist. \n\n"
         )
     };
 
@@ -187,7 +189,7 @@ They are context for understanding the analyzed file only: every Line N referenc
 Start the document directly with its first ## heading. Never wrap the whole document, or any whole section, in a fenced code block or in BEGIN/END-style markers; only the individual code snippets and AI agent prompts described later may be fenced. \
 {topic_section}\
 {guideline_section}\
-{errors_section}\
+
 The document must contain all sections below, in this order, each introduced by a ## heading with exactly the text afterwards:
 Within the sections, format the content freely with Markdown: use **bold**, *italics*, ### subheadings, bullet and numbered lists, `inline code`, blockquotes and fenced code blocks. \
 Do not use # or ## headings other than the section headings listed above. \
@@ -196,13 +198,15 @@ Separate every ## section from the next with a horizontal rule: directly before 
 Sections:
 
 ## Scope
-Explicitly mention what the topic is, summarizing what it is about. If there is no topic, just omit it.
+This section is optional. It may contain the following items depending on what is present:
 
-Also answer all questions present in the topic or code below in a bullet point list (each line starts with a '* '), if there are any. \
-Note that we are requesting the answer to the question, not the question itself. \
-Do not miss any questions.
+Optional first paragraph: Explicitly describe topic {topic_simple} unless it says 'NO TOPIC', in which case you omit this paragraph. Otherwise, if it is a question, answer it directly.
+Optional second paragraph: Questions in file. Answer all questions present in the topic or code below in a bullet point list (each line starts with a '* '), if there are any. \
+Note that we are requesting the answer to the question, not the question itself. Do not miss any questions.
 
-## General understanding
+If neither a topic nor questions in the file exist, omit this section entirely.
+
+## Explanation
 
 ### Simplified
 Describe what the user is writing and the purpose of the file, but explain it in a way that is easy to understand by an five/ten year old (explain like I'm 5).
@@ -210,7 +214,7 @@ Describe what the user is writing and the purpose of the file, but explain it in
 ### Technical
 Describe what the user is writing and what the file as a whole accomplishes. Be informative, technical and elaborate.
 
-### Explanation of gradually increasing difficulty
+### With increasing difficulty
 
 Explain what the file does in gradually increasing difficulty from level 1 to level 5 using bullet points for each.
 Level 1: A simple version ELI5 version that uses limited analogy. Very easy to understand.
@@ -219,7 +223,7 @@ Level 5: Full technical jargon with precise wording. May demand domain knowledge
 
 Each level should be around 3-5 sentences with the detail necessary to understand the general purpose of the file.
 
-### Graph
+### Diagram
 
 Create a compact flowchart in ASCII art showing the file's main control flow - the functions, branches and loops that
 matter, not every line. But make it pedagogic / explanatory for a person who is new to what the file is about. \
@@ -232,17 +236,32 @@ The user attached the file(s) listed after the code from the Imports pane, becau
 For EVERY attached file, write one bullet that starts with the file's name and describes how the analyzed file uses it: what it imports from that file, which functions, types or values it takes from it, and the role that file plays for the analyzed file, like: - prompts.rs: Provides the prompt builders that the file calls. \
 If no files are attached, write *No attached files.*
 
-## Current functionality
+## Parts
 Split the ENTIRE file into meaningful logical segments; every line of the file must belong to at least one segment, and together the segments must cover the whole file from line 1 through line {total_lines}. \
 Give each segment a ### subheading that ends with its 1-based inclusive line range, like: ### Class declaration and fields (Lines 5-12). \
 Under each subheading, review the segment in 2-3 sentences about potential issues, bugs or improvements.
 
+
+## Suggested direction
+
+What do you suggest the user does next on a high conceptual high level in order to accomplish their goal?
+
 ## Problems
-List the problems you see in the file as a whole, not per segment, one bullet per problem, explained properly. \
+
+The next two subsections have bullet lists.
 Start EVERY bullet with the exact line number of the first line of the code it concerns, using the 1-based line numbers shown at the start of each code line below, like: - Line 13: Missing error handling in the loop. \
 Never use a line range in this section and never invent a line number: copy it from the prefixes of the code below. \
 A problem that concerns the whole file uses Line 1.
 If there are no problems, write *No problems found.*
+
+### Compilation
+
+{errors_section}
+
+### Logical
+
+List the logical problems you see in the file as a whole, not per segment, one bullet per problem, explained properly. \
+If there is an identified 'Suggested direction' above, you may include some problems related to it.
 Be especially attentive if the user is hinting that they need help with something, like implementing a specific algorithm. \
 For example: If they write 'I want to implement a peer-to-peer network using rustp2p' then 'Missing implementation for peer-to-peer network' should be considered a problem.
 
