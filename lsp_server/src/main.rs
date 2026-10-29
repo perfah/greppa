@@ -1348,10 +1348,16 @@ fn strip_step_number(line: &str) -> Option<&str> {
 }
 
 /// Parses the text after a step's number, which the prompt requires to
-/// start with the line reference and the action word:
-/// "Line 13: Replace: Refactor the loop to cache the list". Both words
-/// are matched case-insensitively; a missing action word defaults to
-/// Insert, the non-destructive action.
+/// start with the line reference, the item reference and the action
+/// word: "Line 13: [fixes P1] Replace: Refactor the loop to cache the
+/// list". The item reference names the one problem or direction
+/// consideration the step addresses; the code action needs only the
+/// action word and the description, so the reference is skipped here
+/// and stripped from the description, keeping the action's title clean.
+/// Everything is matched case-insensitively; a missing action word
+/// defaults to Insert, the non-destructive action, and a missing item
+/// reference (an older analysis, or a model deviation) parses
+/// unchanged.
 fn parse_step_header(rest: &str) -> Option<(u32, StepKind, &str)> {
     let rest = rest.trim_start();
     let bytes = rest.as_bytes();
@@ -1364,8 +1370,21 @@ fn parse_step_header(rest: &str) -> Option<(u32, StepKind, &str)> {
         return None;
     }
     let line: u32 = after_line[..digits].parse().ok()?;
-    let description = after_line[digits..]
+    let mut description = after_line[digits..]
         .trim_start_matches(|c: char| c == ':' || c.is_whitespace());
+
+    // Skip the "[fixes ID]" item reference the prompt puts between the
+    // line number and the action word. Without this, the action word
+    // lookup below would see "[fixes P1] Replace:" and match nothing,
+    // silently turning every Replace and Delete step into an Insert.
+    if description.starts_with('[') {
+        let inside = &description[1..];
+        if let Some(close) = inside.find(']') {
+            if inside[..close].trim_start().to_ascii_lowercase().starts_with("fixes") {
+                description = inside[close + 1..].trim_start();
+            }
+        }
+    }
 
     let (kind, description) = if let Some(rest) = strip_action_word(description, "Replace") {
         (StepKind::Replace, rest)
