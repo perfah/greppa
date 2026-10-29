@@ -37,7 +37,7 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         Content interpretContent = ContentFactory.getInstance()
                 .createContent(interpretPanel, "Interpret", false);
 
-        List<String> improveSections = List.of("Scope", "Problems", "Recommendations");
+        List<String> improveSections = List.of("Scope", "Suggested direction", "Problems", "Recommendations");
         HintsPanel improvePanel = new HintsPanel(improveSections);
         Content improveContent = ContentFactory.getInstance()
                 .createContent(improvePanel, "Improve", false);
