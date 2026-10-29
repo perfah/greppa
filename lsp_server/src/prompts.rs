@@ -48,7 +48,11 @@ fn guideline() -> Option<String> {
 /// When `topic` is set, the prompt instructs the model to view the entire
 /// document through that topic: every section prioritizes what is
 /// relevant to it, and a section with nothing relevant says so explicitly.
-/// When it is None, the analysis is topic-agnostic.
+/// The Suggested direction and Problems sections additionally restate the
+/// topic in their own instructions: both sit at the far end of the very
+/// long prompt, and the single declaration at the top did not bind them
+/// there, so the model wrote them as if no topic existed. When it is
+/// None, the analysis is topic-agnostic.
 ///
 /// When the user configured a guideline in the IDE's settings, it is
 /// injected right after the topic as standing instructions the model must
@@ -258,6 +262,38 @@ Write only about the code at the cursor; do not review the rest of the file in t
         None => " Do not mark any segment as current.",
     };
 
+    // The Suggested direction section's instructions, built per case so
+    // the section restates the topic when one is set (the same reasoning
+    // as the Scope section). The topic is declared once at the top of the
+    // prompt, but this section's instructions never named it: by the time
+    // the model reached them - at the end of a very long prompt, after
+    // the entire numbered code - that declaration no longer bound, and
+    // the model read "their goal" out of the code instead of the user's
+    // topic. Restating the topic in the section binds it. When no topic
+    // is set, the instruction is unchanged.
+    let direction_section = match topic {
+        Some(topic) => format!(
+            "## Suggested direction\n\n\
+What do you suggest the user does next on a high conceptual high level in order to accomplish their goal? \
+The user's goal is the topic '{topic}': every suggestion in this section must advance that topic directly, and nothing unrelated to it belongs here.\n"
+        ),
+        None => "## Suggested direction\n\n\
+What do you suggest the user does next on a high conceptual high level in order to accomplish their goal?\n"
+            .to_string(),
+    };
+
+    // A note for the Logical subsection that restates the topic when one
+    // is set, so the problems are found through the topic as well: the
+    // subsection's instructions never named it, and the model reported
+    // only what a topic-less read of the code finds. When no topic is
+    // set, no note is injected and the subsection is unchanged.
+    let logical_topic_note = match topic {
+        Some(topic) => format!(
+            "The user's topic for this review is '{topic}': everything in the file that blocks, misses or contradicts that topic is a problem, and those problems must appear in this list.\n"
+        ),
+        None => String::new(),
+    };
+
     format!(
         "You are an expert code reviewer. Analyze the code at the bottom and answer with a single Markdown document - no text before or after it. \
 Start the document directly with its first ## heading. Never wrap the whole document, or any whole section, in a fenced code block or in BEGIN/END-style markers; only the individual code snippets and AI agent prompts described later may be fenced. \
@@ -319,10 +355,7 @@ Give each segment a ### subheading that ends with its 1-based inclusive line ran
 Under each subheading, review the segment in 2-3 sentences about potential issues, bugs or improvements.{parts_cursor_note}
 
 
-## Suggested direction
-
-What do you suggest the user does next on a high conceptual high level in order to accomplish their goal?
-
+{direction_section}
 ## Problems
 
 The next two subsections have bullet lists.
@@ -337,7 +370,7 @@ If there are no problems, write *No problems found.*
 
 ### Logical
 
-List the logical problems you see in the file as a whole, not per segment, one bullet per problem, explained properly. \
+{logical_topic_note}List the logical problems you see in the file as a whole, not per segment, one bullet per problem, explained properly. \
 If there is an identified 'Suggested direction' above, you may include some problems related to it.
 Be especially attentive if the user is hinting that they need help with something, like implementing a specific algorithm. \
 For example: If they write 'I want to implement a peer-to-peer network using rustp2p' then 'Missing implementation for peer-to-peer network' should be considered a problem.
