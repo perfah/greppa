@@ -75,6 +75,14 @@ fn guideline() -> Option<String> {
 /// at the wrong code. The IDE renders the references as clickable links to
 /// the code.
 ///
+/// The Recommendations section must cover both the Problems section and
+/// the Suggested direction: every problem listed in the Problems
+/// section must be resolved by at least one step, and at least one
+/// step must work towards the Suggested direction. The prompt tells
+/// the model to count its problems against its steps, so the required
+/// coverage is checkable by the model itself instead of resting on a
+/// vague "cover both".
+///
 /// The Problems and Suggested actions sections reference a single exact
 /// line, never a range: the first line of the code a problem concerns, and
 /// for a suggested action the line where the step's code is inserted or
@@ -287,7 +295,9 @@ For example: If they write 'I want to implement a peer-to-peer network using rus
 
 ## Recommendations
 Describe the suggested approaches for solving the problems listed in the Problems section and for advancing the Suggested direction above. \
-Every step must either work towards the Suggested direction or resolve one of the listed problems, and together the steps must cover both: never suggest steps that pull in a different direction than the Suggested direction, and never leave the Suggested direction without steps working towards it.
+Every step must either resolve one of the listed problems or work towards the Suggested direction; never suggest steps that pull in a different direction than the Suggested direction. \
+The steps must cover both of them: EVERY problem listed in the Problems section - in both the Compilation and the Logical subsection - must be resolved by at least one step, and at least one step must work towards the Suggested direction. \
+Before writing the steps, count the problems you listed in the Problems section, and verify afterwards that every single one of them is resolved by a step: one problem without a step makes the whole review incomplete. \
 Here it's important to be elaborate: give each step real detail and reasoning.
 This is the most important part of the review and must guide the user on what to do next. \
 Every step in both groups below must start with the exact line number where the change happens: the line at which the step's code is inserted, or the FIRST line of the existing code that the step's code replaces. \
@@ -315,7 +325,7 @@ For EVERY step, add a fenced code block whose first line is 'AI agent prompt:' f
 The AI agent prompt is the only code block allowed in this group; do not add normal code snippets here.
 
 If a group has no steps, write *None.* under its subheading and add one sentence explaining that this can happen while the code does not yet have a clear direction.
-If you have no suggestions at all, write *No suggestions.* and omit both ### subheadings.
+If there are no problems to solve and nothing in the Suggested direction to advance, write *No suggestions.* and omit both ### subheadings.
 
 {cursor_section}
 
