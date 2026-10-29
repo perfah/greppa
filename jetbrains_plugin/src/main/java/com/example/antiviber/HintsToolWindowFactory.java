@@ -25,14 +25,14 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         // The tabs render the same analysis document, each through its own
         // section filter (see HintsService.filterSections): Interpret shows
-        // the understanding sections (Explanation, Parts), Improve the
-        // problems and recommendations, and Relate the relationships to
+        // the understanding sections (Cursor, Explanation, Parts), Improve
+        // the problems and recommendations, and Relate the relationships to
         // other files below the attached-files management. The Etc tab
         // shows the sections none of the three filters catches (see
         // HintsService.filterUnmatchedSections), so the headings the
         // server actually writes are visible when a tab seems to be
         // missing its section.
-        List<String> interpretSections = List.of("Scope", "General understanding", "Current functionality", "Explanation", "Parts");
+        List<String> interpretSections = List.of("Scope", "Cursor", "General understanding", "Current functionality", "Explanation", "Parts");
         HintsPanel interpretPanel = new HintsPanel(interpretSections);
         Content interpretContent = ContentFactory.getInstance()
                 .createContent(interpretPanel, "Interpret", false);

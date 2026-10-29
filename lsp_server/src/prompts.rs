@@ -1,4 +1,5 @@
 use crate::tick_listener::{AttachedFile, CompilerError};
+use tower_lsp::lsp_types::Position;
 
 /// The user's free-text standing instructions for the LLM, configured in
 /// the IDE's settings (the guideline field) and passed to the server as
@@ -24,11 +25,15 @@ fn guideline() -> Option<String> {
 /// introduced by a ## heading that matches a tool window section:
 ///
 ///   ## Scope (topic summary, plus answers to questions found in the code)
-///   ## General understanding
+///   ## Cursor (the exact part of the code the cursor is in; omitted
+///     entirely when no cursor position is known)
+///   ## Explanation (Simplified / Technical / With increasing difficulty /
+///     Diagram)
 ///   ## Relationship to other files (how each attached file is used)
-///   ## Current functionality
-///   ## Problems
-///   ## Recommendations
+///   ## Parts (the file split into line-range segments)
+///   ## Suggested direction (the next steps on a high conceptual level)
+///   ## Problems (Compilation and Logical subsections)
+///   ## Recommendations (steps covering every problem and the direction)
 ///
 /// Within the sections the model may use any Markdown formatting it likes
 /// (bold, italics, subheadings, lists, inline code, fenced code blocks,
@@ -67,6 +72,19 @@ fn guideline() -> Option<String> {
 /// uses each of them. Empty means no files are attached, and that
 /// section says so.
 ///
+/// When `cursor_position` is Some, the code is embedded with a <CURSOR>
+/// marker at the caret (see numbered_code_with_cursor) and the document
+/// contains a ## Cursor section describing the exact part of the code
+/// the cursor is in: the line it is on, the innermost construct
+/// containing it, and the enclosing function or method. That semantic
+/// window is the section's context window: it adapts to the code (a
+/// dense one-liner gets a small window, a spread-out construct a larger
+/// one) instead of cutting constructs at an arbitrary fixed line count,
+/// which would describe fragments instead of the code the user is
+/// actually in. When it is None, no marker is embedded, the Cursor
+/// section is omitted entirely, and the Parts section marks no segment
+/// as current.
+///
 /// The code is embedded with a 1-based line number prefix on every line,
 /// matching the line numbers the IDE's editor gutter shows. The model must
 /// use those numbers for every line reference, so the references match the
@@ -83,14 +101,13 @@ fn guideline() -> Option<String> {
 /// coverage is checkable by the model itself instead of resting on a
 /// vague "cover both".
 ///
-/// The Problems and Suggested actions sections reference a single exact
+/// The Problems and Recommendations sections reference a single exact
 /// line, never a range: the first line of the code a problem concerns, and
-/// for a suggested action the line where the step's code is inserted or
-/// the first existing line it replaces. The Current functionality and
-/// Specific recommendations sections keep line ranges, because their
-/// segments are regions of the file by design.
+/// for a recommendation the line where the step's code is inserted or
+/// the first existing line it replaces. The Parts section keeps line
+/// ranges, because its segments are regions of the file by design.
 pub fn analysis_prompt(
-    cursor_index: Option<usize>,
+    cursor_position: Option<Position>,
     file_content: &str,
     topic: Option<&str>,
     errors: &[CompilerError],
@@ -102,15 +119,25 @@ pub fn analysis_prompt(
     let fence = "`".repeat(3);
 
     // The code with a 1-based line number prefix on every line, like the
-    // IDE's editor gutter shows them. The model references these numbers
-    // instead of counting lines itself, which it cannot do reliably and
-    // which made the line references point at the wrong code.
-    let numbered_code = file_content
-        .lines()
-        .enumerate()
-        .map(|(index, line)| format!("{}: {}", index + 1, line))
-        .collect::<Vec<_>>()
-        .join("\n");
+    // IDE's editor gutter shows them, and - when the cursor position is
+    // known - a <CURSOR> marker at the caret (numbered_code_with_cursor,
+    // the same mechanism the completion prompt uses). The model
+    // references the numbers instead of counting lines itself, which it
+    // cannot do reliably and which made the line references point at the
+    // wrong code; the marker likewise shows the exact caret, replacing
+    // the character index the prompt named before, which the model could
+    // not map to a position for the same reason. The no-cursor branch
+    // uses the same 4-wide number prefix, so the embedded code looks
+    // identical whether or not the position is known.
+    let numbered_code = match cursor_position {
+        Some(position) => numbered_code_with_cursor(file_content, position.line, position.character),
+        None => file_content
+            .lines()
+            .enumerate()
+            .map(|(index, line)| format!("{:4}: {}", index + 1, line))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    };
 
     // The optional topic/goal the user set in the tool window. When set, it
     // is injected as its own paragraph right after the intro, so the model
@@ -203,11 +230,32 @@ They are context for understanding the analyzed file only: every Line N referenc
         )
     };
 
-    let cursor_section = match cursor_index {
-        Some(index) => format!(
-            "The cursor is at character index {index}. In this section, mark the segment that contains the cursor by appending **(current)** to its subheading."
-        ),
-        None => "No cursor position is known; do not mark any segment as current.".to_string(),
+    // The Cursor section's instructions, built per case so the prompt
+    // never contains a placeholder the model could echo into the
+    // document (the same reasoning as the Scope section). When the
+    // position is known, the section describes the exact part of the
+    // code the cursor is in, locating it by the <CURSOR> marker in the
+    // numbered code below. When no position is known, the section is
+    // not listed at all, so the document never carries an empty
+    // placeholder section.
+    let cursor_section = match cursor_position {
+        Some(_) => "## Cursor\n\
+The user's cursor is at the position marked with <CURSOR> in the code below; the marker itself is not part of the code. \
+Describe the exact part of the code the cursor is in, in three short numbered parts: \
+1. One sentence naming the line the cursor is on, quoting that line's code inline - without the line-number prefix and without the <CURSOR> marker - and referencing the line like: The cursor is on Line 13: `let cache = build_cache();` \
+2. A description of the innermost complete construct containing the cursor - the statement, expression, parameter or declaration the marker sits in, or the one it directly follows when it sits between constructs - and what that construct does. \
+3. The name of the enclosing function, method or type, and one or two sentences about the role the cursor's construct plays in it. \
+Write only about the code at the cursor; do not review the rest of the file in this section.\n"
+            .to_string(),
+        None => String::new(),
+    };
+
+    // Whether the Parts section marks the segment containing the cursor.
+    // The <CURSOR> marker in the numbered code shows the model where the
+    // cursor is, so it can find the segment without position arithmetic.
+    let parts_cursor_note = match cursor_position {
+        Some(_) => " Mark the segment that contains the <CURSOR> marker by appending **(current)** to its subheading.",
+        None => " Do not mark any segment as current.",
     };
 
     format!(
@@ -225,6 +273,7 @@ Separate every ## section from the next with a horizontal rule: directly before 
 Sections:
 
 {scope_section}
+{cursor_section}
 ## Explanation
 
 ### Simplified
@@ -267,7 +316,7 @@ If no files are attached, write *No flowchart: nothing to visualize.* instead.
 ## Parts
 Split the ENTIRE file into meaningful logical segments; every line of the file must belong to at least one segment, and together the segments must cover the whole file from line 1 through line {total_lines}. \
 Give each segment a ### subheading that ends with its 1-based inclusive line range, like: ### Class declaration and fields (Lines 5-12). \
-Under each subheading, review the segment in 2-3 sentences about potential issues, bugs or improvements.
+Under each subheading, review the segment in 2-3 sentences about potential issues, bugs or improvements.{parts_cursor_note}
 
 
 ## Suggested direction
@@ -326,8 +375,6 @@ The AI agent prompt is the only code block allowed in this group; do not add nor
 
 If a group has no steps, write *None.* under its subheading and add one sentence explaining that this can happen while the code does not yet have a clear direction.
 If there are no problems to solve and nothing in the Suggested direction to advance, write *No suggestions.* and omit both ### subheadings.
-
-{cursor_section}
 
 BEGIN CODE
 {numbered_code}
@@ -401,7 +448,10 @@ Output only the insertion text for the caret position."
 /// clamped into the line. The prefixes match the IDE's editor gutter, so
 /// the model locates the caret by reading instead of counting. LSP columns
 /// are UTF-16 units; the clamp uses the line's character count, which can
-/// differ only for lines with non-BMP characters.
+/// differ only for lines with non-BMP characters. Used by both prompts:
+/// the completion prompt marks the insertion point, and the analysis
+/// prompt marks the caret that the Cursor section describes and whose
+/// segment the Parts section marks as current.
 fn numbered_code_with_cursor(file_content: &str, line: u32, character: u32) -> String {
     let target_line = line as usize;
     let mut out = String::new();

@@ -180,17 +180,19 @@ impl StreamingTickListener for OllamaTickListener {
         errors: &[CompilerError],
         attachments: Vec<AttachedFile>,
     ) -> (TickSnapshot, mpsc::Receiver<TickSnapshot>) {
-        let cursor_index = cursor_position.map(|position| {
-            let index = position_to_char_index(file_content, position);
+        // The cursor position is logged here and passed through to the
+        // prompt builder unchanged: prompts::analysis_prompt embeds it as
+        // a <CURSOR> marker in the numbered code, so the model sees the
+        // exact caret instead of a character index it cannot map to a
+        // position (position_to_char_index is gone with it).
+        if let Some(position) = &cursor_position {
             log_message(&format!(
-                "OllamaTickListener: tick at cursor index {} (line {}, char {}) in file with {} lines",
-                index,
+                "OllamaTickListener: tick at line {} char {} in file with {} lines",
                 position.line,
                 position.character,
                 file_content.lines().count()
             ));
-            index
-        });
+        }
 
         // Returned immediately so the caller can show a placeholder; it is
         // not written to disk.
@@ -201,7 +203,7 @@ impl StreamingTickListener for OllamaTickListener {
         let (tx, rx) = mpsc::channel(128);
 
         let file_content_owned = file_content.to_string();
-        let cursor_index_for_task = cursor_index;
+        let cursor_position_for_task = cursor_position;
         let topic_for_task = topic.map(|topic| topic.to_string());
         let errors_for_task = errors.to_vec();
         let attachments_for_task = attachments;
@@ -210,7 +212,7 @@ impl StreamingTickListener for OllamaTickListener {
         tokio::spawn(async move {
             run_ollama_work(
                 &file_content_owned,
-                cursor_index_for_task,
+                cursor_position_for_task,
                 topic_for_task,
                 errors_for_task,
                 attachments_for_task,
@@ -392,6 +394,10 @@ fn strip_repeated_prefix(prefix: &str, completion: &str) -> String {
 /// the real error instead of only the generic fallback text that the
 /// analysis file receives.
 ///
+/// The `cursor_position` is the caret the IDE reported with the tick;
+/// the prompt embeds it as a <CURSOR> marker in the numbered code and
+/// describes it in the document's Cursor section.
+///
 /// The `errors` are the compilation/syntax errors the IDE's code
 /// analyzer reports for the file; the prompt (prompts::analysis_prompt)
 /// requires the model to list them in the Problems section.
@@ -400,7 +406,7 @@ fn strip_repeated_prefix(prefix: &str, completion: &str) -> String {
 /// pane; the prompt renders them as context after the analyzed code.
 async fn run_ollama_work(
     file_content: &str,
-    cursor_index: Option<usize>,
+    cursor_position: Option<Position>,
     topic: Option<String>,
     errors: Vec<CompilerError>,
     attachments: Vec<AttachedFile>,
@@ -429,7 +435,7 @@ async fn run_ollama_work(
     // LlmTickListener, so there is a single source of truth for the
     // Markdown document format.
     let analysis_prompt = prompts::analysis_prompt(
-        cursor_index,
+        cursor_position,
         file_content,
         topic.as_deref(),
         &errors,
@@ -591,24 +597,6 @@ async fn send_final(tx: &mpsc::Sender<TickSnapshot>, markdown: &str) {
             markdown: markdown.to_string(),
         })
         .await;
-}
-
-fn position_to_char_index(content: &str, position: Position) -> usize {
-    let target_line = position.line as usize;
-    let target_char = position.character as usize;
-
-    let mut current_line = 0usize;
-    let mut char_index = 0usize;
-
-    for line in content.split('\n') {
-        if current_line == target_line {
-            return char_index + target_char.min(line.chars().count());
-        }
-        char_index += line.chars().count() + 1;
-        current_line += 1;
-    }
-
-    char_index
 }
 
 /// Returns the text for logging, truncated to max_len characters with a
