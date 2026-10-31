@@ -1,22 +1,23 @@
 # Greppa
 
-**Greppa** is an interactive tool for long-term software projects, where consistent progress depends on genuine understanding. AI-assisted “vibe coding” accelerates prototyping and implementation, but it also widens the distance between developers and their own projects. Because modern AI agents are eager to take the initiative, the real bottleneck often becomes alignment: between the agent, the software, and the developer’s intent.
+**Greppa** is a JetBrains plugin for long-term software projects, where progress depends on the developer’s understanding of their own code. AI-assisted coding speeds up prototyping and implementation, but it can also leave developers less familiar with what has been written. Because AI agents tend to take a lot of initiative, keeping the agent, the software, and the developer’s intent aligned can become a challenge.
 
-Where conventional AI coding hands control to an agent that rewrites the code, Greppa works differently. It operates as a closed loop: the AI observes the changes the developer makes, responds with feedback, and completes the parts the developer hadn’t considered. Developers decide how much to lean on the AI, whatever their experience level, simply by adjusting how often it checks in.
+Instead of handing control to an agent that edits the code, Greppa automatically **identifies tasks that you should do yourself**, while leaving the rest to an agent. For manual tasks, the plugin acts more like a soft-assist, guiding the developer, as opposed to an agentic harness.
+The AI follows along as the developer works: it analyzes their changes, gives feedback, and can auto-complete parts the developer hasn’t considered.
 
-The key distinction is that Greppa doesn’t assume the agent should hold all the initiative. The plugin explicitly separates tasks that are essential to understanding the project from those straightforward enough to automate. The aim is to support the mental model a developer needs to truly understand their own software, and to close the distance that AI-driven development tends to create.
 
 ## Features
 
 ### Interpret view
 * Grasp code quickly: an LLM interprets your code and generates a clear, informative markdown summary
 * Get explanations of varying difficulty (level 1-5) to match your current level
-* Get an automatically generated diagram that visualizes what the code does
+* Automatically generated diagrams that visualizes what the code does
 * Receive explanations focused on the code under your cursor
 * Navigate with ease: files are broken into explained segments, each linked to its source code by a blue line you can click
 
 ### Improve view
 * Sorts tasks into "Critical for understanding" and "Automatable", guided by your own configurable guidelines
+* Identifies both compilation and logical errors, immediately explaining them and suggesting a course correction  
 
 ### Topic/goal
 * Optionally set a topic or goal to focus on; it shapes most or all generated content
@@ -34,6 +35,11 @@ The key distinction is that Greppa doesn’t assume the agent should hold all th
 
 ### Compatibility
 * Works with any OpenAI-compatible provider (see the [OpenAI OpenAPI specification](https://github.com/openai/openai-openapi)). See the Ollama example configuration below.
+
+## Note
+
+* This plugin is only as good as the LLM you use, I recommend using a model with ~30b+ parameters. Your mileage may vary.
+
 ## Screenshots
 
 ### Interpret view
@@ -50,4 +56,4 @@ The key distinction is that Greppa doesn’t assume the agent should hold all th
 
 ## Reservations
 
-I vibe-coded this project and take no credit for it.
+* This project was vibe-coded and I take no credit for it.
