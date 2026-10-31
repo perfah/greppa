@@ -37,11 +37,11 @@ fn log_file_path() -> PathBuf {
                 std::env::var("TEMP")
                     .map(PathBuf::from)
                     .unwrap_or_else(|_| PathBuf::from("C:\\temp"))
-                    .join("antiviber-lsp.log")
+                    .join("greppa-lsp.log")
             }
             #[cfg(not(target_os = "windows"))]
             {
-                PathBuf::from("/tmp/antiviber-lsp.log")
+                PathBuf::from("/tmp/greppa-lsp.log")
             }
         }
     }

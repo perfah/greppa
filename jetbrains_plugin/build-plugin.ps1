@@ -1,5 +1,5 @@
-# Build script for the Antiviber JetBrains plugin on Windows.
-# Run this from the antiviber\ directory.
+# Build script for the Greppa JetBrains plugin on Windows.
+# Run this from the greppa\ directory.
 #
 # Besides compiling, the script verifies that the produced jar really
 # contains the current sources (the Topic/goal field, the trigger-file
@@ -8,7 +8,7 @@
 # silently leave an old plugin running: either it fails loudly, or the
 # IDE runs the new build after the next restart.
 #
-# The built jar is located by name pattern (antiviber-*.jar), so the script
+# The built jar is located by name pattern (greppa-*.jar), so the script
 # works no matter which version pom.xml declares; the version in pom.xml and
 # plugin.xml is only the human-visible proof in Settings | Plugins.
 
@@ -143,14 +143,14 @@ if ($LASTEXITCODE -ne 0) {
 
 # ---------------------------------------------------------------------------
 # Locate the freshly built plugin jar. 'clean' ran first, so exactly one
-# antiviber-*.jar exists in target, whatever version pom.xml declares.
+# greppa-*.jar exists in target, whatever version pom.xml declares.
 # ---------------------------------------------------------------------------
 
 $targetDir = Join-Path $scriptDir "target"
-$pluginJarItem = Get-ChildItem -Path $targetDir -Filter "antiviber-*.jar" -ErrorAction SilentlyContinue |
+$pluginJarItem = Get-ChildItem -Path $targetDir -Filter "greppa-*.jar" -ErrorAction SilentlyContinue |
     Select-Object -First 1
 if ($null -eq $pluginJarItem) {
-    Write-Error "Maven finished but no antiviber-*.jar was found in $targetDir."
+    Write-Error "Maven finished but no greppa-*.jar was found in $targetDir."
     exit 1
 }
 $pluginJar = $pluginJarItem.FullName
@@ -172,9 +172,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 $requiredClasses = @(
-    "com/example/antiviber/HintsPanel.class",
-    "com/example/antiviber/LspTabSelectionListener.class",
-    "com/example/antiviber/HintsFilePoller.class"
+    "com/example/greppa/HintsPanel.class",
+    "com/example/greppa/LspTabSelectionListener.class",
+    "com/example/greppa/HintsFilePoller.class"
 )
 foreach ($class in $requiredClasses) {
     if ($jarEntries -notcontains $class) {
@@ -186,7 +186,7 @@ foreach ($class in $requiredClasses) {
 # The Topic/goal input must be inside the compiled HintsPanel. If it is
 # missing, the HintsPanel.java on disk is still the old version and the
 # field can never appear in the IDE.
-$panelMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.example.antiviber.HintsPanel
+$panelMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.example.greppa.HintsPanel
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect HintsPanel.class inside the plugin jar."
     exit 1
@@ -199,7 +199,7 @@ if (-not ($panelMembers | Select-String -SimpleMatch "topicField")) {
 # The poller must have the trigger file writer. If not, the
 # HintsFilePoller.java on disk is still the old version and the reload
 # button cannot ask the server for a fresh analysis.
-$pollerMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.example.antiviber.HintsFilePoller
+$pollerMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.example.greppa.HintsFilePoller
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect HintsFilePoller.class inside the plugin jar."
     exit 1
@@ -212,7 +212,7 @@ if (-not ($pollerMembers | Select-String -SimpleMatch "writeTriggerFile")) {
 # The tab-switch listener must use the trigger file mechanism. If not,
 # the LspTabSelectionListener.java on disk is still the old version and
 # tab switches keep doing nothing.
-$tabBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.example.antiviber.LspTabSelectionListener
+$tabBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.example.greppa.LspTabSelectionListener
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect LspTabSelectionListener.class inside the plugin jar."
     exit 1
@@ -227,7 +227,7 @@ if (-not ($tabBytecode | Select-String -SimpleMatch "writeTriggerFile")) {
 # LspTabSelectionListener subscription). If it is missing, tab switches
 # keep doing nothing because the HintsToolWindowFactory.java on disk is
 # still the old version.
-$factoryBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.example.antiviber.HintsToolWindowFactory
+$factoryBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.example.greppa.HintsToolWindowFactory
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect HintsToolWindowFactory.class inside the plugin jar."
     exit 1
@@ -241,21 +241,21 @@ Write-Host "Verified: the jar contains the Topic/goal field, the trigger-file me
 # ---------------------------------------------------------------------------
 # Install: copy the fresh jar over the jar installed in the IDE. Plugins
 # installed via 'Install Plugin from Disk' live under
-# %APPDATA%\JetBrains\<product>\plugins\...\antiviber*.jar. The installed
+# %APPDATA%\JetBrains\<product>\plugins\...\greppa*.jar. The installed
 # file name is kept: the IDE reads the plugin id and version from the
 # plugin.xml inside the jar, not from the file name.
 # ---------------------------------------------------------------------------
 
 Write-Host ""
-Write-Host "Looking for the installed Antiviber plugin jar..."
+Write-Host "Looking for the installed Greppa plugin jar..."
 $installedJars = @()
 $jetbrainsConfig = Join-Path $env:APPDATA "JetBrains"
 if (Test-Path $jetbrainsConfig) {
-    $installedJars = @(Get-ChildItem -Path $jetbrainsConfig -Recurse -Filter "antiviber*.jar" -ErrorAction SilentlyContinue)
+    $installedJars = @(Get-ChildItem -Path $jetbrainsConfig -Recurse -Filter "greppa*.jar" -ErrorAction SilentlyContinue)
 }
 
 if ($installedJars.Count -eq 0) {
-    Write-Host "No installed Antiviber jar found under $jetbrainsConfig."
+    Write-Host "No installed Greppa jar found under $jetbrainsConfig."
     Write-Host "Install the plugin once manually:"
     Write-Host "  1. Start RustRover."
     Write-Host "  2. Open Settings | Plugins, click the gear icon, choose 'Install Plugin from Disk...'."
@@ -280,5 +280,5 @@ if ($installedJars.Count -eq 0) {
 
 Write-Host ""
 Write-Host "Build complete and verified: $pluginJar"
-Write-Host "Restart the IDE; the Antiviber Hints tool window then shows the Topic/goal input at its top."
+Write-Host "Restart the IDE; the Greppa Hints tool window then shows the Topic/goal input at its top."
 Write-Host "Settings | Plugins must show version 1.0.3 after the restart; if it still shows 1.0.2, the IDE is running the previous jar."

@@ -1,4 +1,4 @@
-package com.example.antiviber;
+package com.example.greppa;
 
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The Imports pane of the Antiviber Interpretation tool window (the
+ * The Imports pane of the Greppa Interpretation tool window (the
  * strip at the top of the Relate tab; see HintsToolWindowFactory and
  * OpenImportsPaneAction).
  *

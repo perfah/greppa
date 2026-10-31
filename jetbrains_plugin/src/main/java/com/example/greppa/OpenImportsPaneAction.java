@@ -1,4 +1,4 @@
-package com.example.antiviber;
+package com.example.greppa;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -11,7 +11,7 @@ import com.intellij.ui.content.ContentManager;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Toolbar action that shows the Relate tab of the Antiviber
+ * Toolbar action that shows the Relate tab of the Greppa
  * Interpretation tool window, whose top part manages the files attached
  * to the analysis: the imports of the current file the local scan found,
  * the files the user added manually, and which of them are attached.
@@ -35,7 +35,7 @@ public class OpenImportsPaneAction extends AnAction {
             return;
         }
         ToolWindow toolWindow = ToolWindowManager.getInstance(project)
-                .getToolWindow("Antiviber Interpretation");
+                .getToolWindow("Greppa Interpretation");
         if (toolWindow == null) {
             return;
         }

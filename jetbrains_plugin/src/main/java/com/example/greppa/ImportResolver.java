@@ -1,4 +1,4 @@
-package com.example.antiviber;
+package com.example.greppa;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;

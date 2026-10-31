@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build script for the Antiviber JetBrains plugin.
-# Run this from the antiviber/ directory.
+# Build script for the Greppa JetBrains plugin.
+# Run this from the greppa/ directory.
 
 IDEA_HOME="${IDEA_HOME:-/opt/RustRover}"
 JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/default-java}"
@@ -89,4 +89,4 @@ mvn -Didea.classpath.jar="$classpathJar" -Dmaven.compiler.fork=true clean packag
 
 echo ""
 echo "Build complete. Install the plugin from:"
-echo "  antiviber/target/antiviber-1.0.0.jar"
+echo "  greppa/target/greppa-1.0.0.jar"

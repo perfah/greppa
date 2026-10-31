@@ -1,6 +1,6 @@
 <idea-plugin>
-    <id>com.example.antiviber</id>
-    <name>Antiviber</name>
+    <id>com.example.greppa</id>
+    <name>Greppa</name>
     <version>1.0.6</version>
     <vendor>Example</vendor>
 
@@ -9,7 +9,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        Added the Antiviber Interpretation tool window that displays AI-generated segment reviews and highlights the segment currently being edited.
+        Added the Greppa Interpretation tool window that displays AI-generated segment reviews and highlights the segment currently being edited.
     ]]></change-notes>
 
     <idea-version since-build="232.0"/>
@@ -23,39 +23,39 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <platform.lsp.serverSupportProvider
-                implementation="com.example.antiviber.AntiviberLspServerSupportProvider"/>
+                implementation="com.example.greppa.GreppaLspServerSupportProvider"/>
         <applicationConfigurable
                 parentId="tools"
-                instance="com.example.antiviber.AntiviberSettingsConfigurable"
-                id="com.example.antiviber.AntiviberSettingsConfigurable"
-                displayName="Antiviber LSP Server"/>
+                instance="com.example.greppa.GreppaSettingsConfigurable"
+                id="com.example.greppa.GreppaSettingsConfigurable"
+                displayName="Greppa LSP Server"/>
         <applicationService
-                serviceImplementation="com.example.antiviber.AntiviberSettingsState"/>
-        <toolWindow id="Antiviber Interpretation"
+                serviceImplementation="com.example.greppa.GreppaSettingsState"/>
+        <toolWindow id="Greppa"
                     anchor="right"
-                    factoryClass="com.example.antiviber.HintsToolWindowFactory"
-                    icon="/icons/antiviber.svg"
+                    factoryClass="com.example.greppa.HintsToolWindowFactory"
+                    icon="/icons/greppa.svg"
                     canCloseContents="false"/>
-        <!-- Ranks the Antiviber LSP completion item to the top of the
-             completion popup; see AntiviberCompletionWeigher. order="first"
+        <!-- Ranks the Greppa LSP completion item to the top of the
+             completion popup; see GreppaCompletionWeigher. order="first"
              makes it the leading sorting criterion, ahead of any other
              custom weigher (e.g. one registered by the Rust plugin). -->
         <lookup.elementWeigher
-                implementationClass="com.example.antiviber.AntiviberCompletionWeigher"
+                implementationClass="com.example.greppa.GreppaCompletionWeigher"
                 order="first"/>
-        <!-- AntiviberProjectActivity subscribes the listener that refreshes
+        <!-- GreppaProjectActivity subscribes the listener that refreshes
              the analysis when a document is saved (Ctrl+S, Save All,
              autosave) by writing the tick trigger file. The class was
              previously dead code with no registration; without this entry
              the save listener never subscribes. -->
-        <postStartupActivity implementation="com.example.antiviber.AntiviberProjectActivity"/>
+        <postStartupActivity implementation="com.example.greppa.GreppaProjectActivity"/>
     </extensions>
 
     <actions>
-        <action id="com.example.antiviber.OpenAntiviberSettings"
-                class="com.example.antiviber.OpenAntiviberSettingsAction"
-                text="Antiviber Settings"
-                description="Open Antiviber LSP Server settings">
+        <action id="com.example.greppa.OpenGreppaSettings"
+                class="com.example.greppa.OpenGreppaSettingsAction"
+                text="Greppa Settings"
+                description="Open Greppa LSP Server settings">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

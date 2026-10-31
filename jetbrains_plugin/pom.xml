@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example</groupId>
-    <artifactId>antiviber</artifactId>
+    <artifactId>greppa</artifactId>
     <version>1.0.6</version>
     <packaging>jar</packaging>
 
-    <name>Antiviber</name>
+    <name>Greppa</name>
     <description>JetBrains plugin providing AI-based auto-completion via an external Rust LSP server.</description>
 
     <properties>

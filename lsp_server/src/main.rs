@@ -301,7 +301,7 @@ impl LanguageServer for Backend {
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo {
-                name: "antiviber-lsp-server".to_string(),
+                name: "greppa-lsp-server".to_string(),
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
         });
@@ -310,7 +310,7 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        log_message("Antiviber LSP server initialized");
+        log_message("Greppa LSP server initialized");
         // No periodic loop. Updates are triggered by file open, file change
         // (debounced), the custom didSwitchFile notification, and the
         // custom forceTick notification sent by the reload button.
@@ -505,7 +505,7 @@ impl LanguageServer for Backend {
 
         let items = vec![CompletionItem {
             label,
-            detail: Some("Antiviber suggestion".to_string()),
+            detail: Some("Greppa suggestion".to_string()),
             kind: Some(CompletionItemKind::TEXT),
             insert_text: Some(completion_text),
             // Prioritize the AI suggestion in the popup: preselect asks
@@ -589,7 +589,7 @@ impl LanguageServer for Backend {
             let mut changes = HashMap::new();
             changes.insert(url.clone(), vec![edit]);
             actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-                title: format!("Antiviber: {}", shorten_title(&step.description)),
+                title: format!("Greppa: {}", shorten_title(&step.description)),
                 kind: Some(CodeActionKind::REFACTOR),
                 edit: Some(WorkspaceEdit {
                     changes: Some(changes),
@@ -608,7 +608,7 @@ impl LanguageServer for Backend {
 
 #[tokio::main]
 async fn main() {
-    log_message("[antiviber-lsp] server starting");
+    log_message("[greppa-lsp] server starting");
 
     env::set_var("RAYON_NUM_THREADS", "12");
     env::set_var("OMP_NUM_THREADS", "12");
@@ -1120,7 +1120,7 @@ fn write_hints_file(uri: &str, markdown: &str) -> std::io::Result<()> {
     let file_name = format!("{}.md", sanitize_uri(uri));
     let path = dir.join(file_name);
 
-    let content = format!("<!-- antiviber-uri: {} -->\n{}", uri, markdown);
+    let content = format!("<!-- greppa-uri: {} -->\n{}", uri, markdown);
 
     // Write to a temporary file and rename it so the Java poller never sees a
     // partially-written or truncated file.
@@ -1530,7 +1530,7 @@ fn hints_dir() -> PathBuf {
     // the analysis files live.
     if let Ok(dir) = env::var("ANTIVIBER_HINTS_DIR") {
         if !dir.is_empty() {
-            return PathBuf::from(dir).join("antiviber-hints");
+            return PathBuf::from(dir).join("greppa-hints");
         }
     }
 
@@ -1539,11 +1539,11 @@ fn hints_dir() -> PathBuf {
         std::env::var("TEMP")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("C:\\temp"))
-            .join("antiviber-hints")
+            .join("greppa-hints")
     }
     #[cfg(not(target_os = "windows"))]
     {
-        PathBuf::from("/tmp/antiviber-hints")
+        PathBuf::from("/tmp/greppa-hints")
     }
 }
 
