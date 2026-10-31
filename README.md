@@ -38,15 +38,15 @@ The key distinction is that Greppa doesn’t assume the agent should hold all th
 
 ### Interpret view
 
-![Interpret view](./assets/interpret.png)
+![Interpret view](./screenshots/interpret.png)
 
 ### Improve view:
 
-![Improve view](./assets/improve.png)
+![Improve view](./screenshots/improve.png)
 
 ### Settings view
 
-![Settings](./assets/settings.png)
+![Settings](./screenshots/settings.png)
 
 ## Reservations
 
