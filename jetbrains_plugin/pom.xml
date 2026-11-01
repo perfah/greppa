@@ -18,6 +18,10 @@
         <idea.home>C:\Program Files\JetBrains\RustRover 2024.2.3</idea.home>
         <!-- Path to a classpath jar produced by the build script that references all IDE jars. -->
         <idea.classpath.jar></idea.classpath.jar>
+        <!-- Lsp4j version to compile and bundle against. Verify it matches
+             the lsp4j-<version>.jar actually present in the IDE's lib
+             directory and update if it differs. -->
+        <lsp4j.version>0.21.0</lsp4j.version>
     </properties>
 
     <dependencies>
@@ -33,6 +37,17 @@
             <artifactId>annotations</artifactId>
             <version>24.0.0</version>
             <scope>provided</scope>
+        </dependency>
+        <!-- The IDE does not export its bundled lsp4j to third-party plugin
+             classloaders, so the classes are missing at runtime unless the
+             plugin bundles them itself. Declared before ide-classpath so
+             javac resolves this version first; org.eclipse.lsp4j.jsonrpc
+             comes in transitively. -->
+        <dependency>
+            <groupId>org.eclipse.lsp4j</groupId>
+            <artifactId>org.eclipse.lsp4j</artifactId>
+            <version>${lsp4j.version}</version>
+            <scope>compile</scope>
         </dependency>
         <!-- Classpath jar that references every IntelliJ Platform jar. -->
         <dependency>
@@ -68,6 +83,41 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <version>3.3.0</version>
+            </plugin>
+            <!-- Bundles only the lsp4j artifacts into the plugin jar so
+                 their classes are on the plugin's own classloader at
+                 runtime; gson and the platform classes keep coming from
+                 the IDE. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <artifactSet>
+                                <includes>
+                                    <include>org.eclipse.lsp4j:*</include>
+                                </includes>
+                            </artifactSet>
+                            <filters>
+                                <filter>
+                                    <artifact>org.eclipse.lsp4j:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>*.DSA</exclude>
+                                        <exclude>*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
