@@ -5,12 +5,8 @@
     <vendor>Example</vendor>
 
     <description><![CDATA[
-        Provides AI-based auto-completion and a background code interpretation report by communicating with an external Rust LSP server.
+        An AI accelerated coding workflow, and Jetbrains plugin, that understands that some tasks are better done by you
     ]]></description>
-
-    <change-notes><![CDATA[
-        Added the Greppa Interpretation tool window that displays AI-generated segment reviews and highlights the segment currently being edited.
-    ]]></change-notes>
 
     <idea-version since-build="232.0"/>
 
