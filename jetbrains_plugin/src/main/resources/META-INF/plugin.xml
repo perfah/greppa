@@ -39,12 +39,6 @@
         <lookup.elementWeigher
                 implementationClass="com.example.greppa.GreppaCompletionWeigher"
                 order="first"/>
-        <!-- GreppaProjectActivity subscribes the listener that refreshes
-             the analysis when a document is saved (Ctrl+S, Save All,
-             autosave) by writing the tick trigger file. The class was
-             previously dead code with no registration; without this entry
-             the save listener never subscribes. -->
-        <postStartupActivity implementation="com.example.greppa.GreppaProjectActivity"/>
     </extensions>
 
     <actions>
