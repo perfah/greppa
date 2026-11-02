@@ -30,7 +30,7 @@
         <toolWindow id="Greppa"
                     anchor="right"
                     factoryClass="com.example.greppa.HintsToolWindowFactory"
-                    icon="/icons/greppa.svg"
+                    icon="/icon.svg"
                     canCloseContents="false"/>
         <!-- Ranks the Greppa LSP completion item to the top of the
              completion popup; see GreppaCompletionWeigher. order="first"

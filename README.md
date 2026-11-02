@@ -1,3 +1,7 @@
+![Icon](./icon.svg)
+
+---
+
 # Greppa
 
 **Greppa** is a JetBrains plugin for long-term software projects, where progress depends on the developer’s understanding of their own code. AI-assisted coding speeds up prototyping and implementation, but it can also leave developers less familiar with what has been written. Because AI agents tend to take a lot of initiative, keeping the agent, the software, and the developer’s intent aligned can become a challenge.
@@ -56,4 +60,4 @@ The AI follows along as the developer works: it analyzes their changes, gives fe
 
 ## Reservations
 
-* This project was vibe-coded and I take no credit for it.
+* This project was mostly vibe-coded.

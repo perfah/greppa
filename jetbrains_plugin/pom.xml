@@ -15,8 +15,15 @@
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <idea.home>C:\Program Files\JetBrains\RustRover 2024.2.3</idea.home>
-        <!-- Path to a classpath jar produced by the build script that references all IDE jars. -->
+        <!-- Path to a classpath jar produced by the build script that
+             references all IDE jars. It MUST be generated from the same
+             IDE installation the plugin runs in (see discover-jars.ps1
+             and its -IdeaHome parameter): these jars are the only
+             IntelliJ Platform on the compile classpath, and the JVM links
+             platform classes by name at runtime, so compiling against one
+             IDE version and running the plugin in another surfaces as
+             NoSuchFieldError / NoSuchMethodError / NoClassDefFoundError
+             when the plugin loads. -->
         <idea.classpath.jar></idea.classpath.jar>
         <!-- Lsp4j version to compile and bundle against. Verify it matches
              the lsp4j-<version>.jar actually present in the IDE's lib
