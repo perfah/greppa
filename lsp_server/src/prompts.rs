@@ -28,7 +28,7 @@ fn guideline() -> Option<String> {
 ///   ## Cursor (the exact part of the code the cursor is in; omitted
 ///     entirely when no cursor position is known)
 ///   ## Explanation (Simplified / Technical / With increasing difficulty /
-///     Diagram)
+///     Relevant concepts / Diagram)
 ///   ## Relationship to other files (how each attached file is used)
 ///   ## Parts (the file split into line-range segments)
 ///   ## Suggested direction (the next steps on a high conceptual level)
@@ -127,8 +127,8 @@ pub fn analysis_prompt(
     // known - a <CURSOR> marker at the caret (numbered_code_with_cursor,
     // the same mechanism the completion prompt uses). The model
     // references the numbers instead of counting lines itself, which it
-    // cannot do reliably and which made the line references point at the
-    // wrong code; the marker likewise shows the exact caret, replacing
+    // cannot do reliably and which made the line references point at
+    // the wrong code; the marker likewise shows the exact caret, replacing
     // the character index the prompt named before, which the model could
     // not map to a position for the same reason. The no-cursor branch
     // uses the same 4-wide number prefix, so the embedded code looks
@@ -326,6 +326,12 @@ Level 1: A simple version ELI5 version that uses limited analogy. Very easy to u
 Level 5: Full technical jargon with precise wording. May demand domain knowledge.
 
 Each level should be around 3-5 sentences with the detail necessary to understand the general purpose of the file.
+
+### Relevant concepts
+
+List a few concepts that are key for understanding this file - the domain ideas, algorithms, data structures, patterns or mechanisms the code is built on, conceptually at the level of the code itself. \
+Do not explain trivial programming constructs (loops, variables, basic syntax) unless the file consists of just that. \
+List them as bullets (each line starts with '* '), each starting with the concept's name in **bold** followed by one or two sentences.
 
 ### Diagram
 
