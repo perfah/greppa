@@ -31,8 +31,8 @@ public class GreppaSettingsComponent {
 
     public GreppaSettingsComponent() {
         lspServerPathField.addBrowseFolderListener(
-                "Select LSP Server Binary",
-                "Path to the lsp_server executable",
+                "Select Server Binary",
+                "Path to the Greppa server executable",
                 null,
                 new FileChooserDescriptor(true, false, false, false, false, false)
         );
@@ -40,15 +40,18 @@ public class GreppaSettingsComponent {
         llmBaseUrlField.setToolTipText(
                 "OpenAI-compatible base URL of the LLM service, including the version path, "
                         + "e.g. 'http://localhost:11434/v1' (Ollama), 'https://api.openai.com/v1' (OpenAI) "
-                        + "or 'https://api.anthropic.com/v1/' (Anthropic). Empty = the server's default (a local Ollama).");
+                        + "or 'https://api.anthropic.com/v1/' (Anthropic). "
+                        + "Empty = the default 'http://localhost:11434/v1' (a local Ollama).");
 
         llmModelField.setToolTipText(
                 "LLM model used for analyses and completions, e.g. 'qwen2.5-coder:7b' (Ollama) "
-                        + "or 'gpt-4o-mini' (OpenAI). Empty = the server's default model.");
+                        + "or 'gpt-4o-mini' (OpenAI). "
+                        + "Empty = the default model 'gemma4:31b-cloud' (an Ollama tag).");
 
         llmApiKeyField.setToolTipText(
                 "API key (bearer token) for the LLM service. Local services such as Ollama ignore it; "
-                        + "hosted services require it. Empty = the server's built-in placeholder key.");
+                        + "hosted services require it. "
+                        + "Empty = the built-in placeholder key 'ollama'.");
 
         // Free text, so wrap lines instead of growing one long line.
         guidelineField.setLineWrap(true);
@@ -56,16 +59,17 @@ public class GreppaSettingsComponent {
         guidelineField.setToolTipText(
                 "Free-text standing instructions for the LLM, e.g. 'prefer functional style, never suggest unsafe code'. "
                         + "Injected into the analysis and completion prompts. Empty = no guideline. "
-                        + "Takes effect the next time the LSP server is started.");
+                        + "Takes effect the next time the server is started.");
 
         autoUpdateMinCharsField.setToolTipText(
                 "Minimum number of characters that must have changed since the last interpretation "
                         + "before writing triggers a new one. 0 disables the automatic refresh while writing; "
                         + "opening a file, switching tabs and the reload button still re-analyze. "
-                        + "Takes effect the next time the LSP server is started.");
+                        + "Default: 50. "
+                        + "Takes effect the next time the server is started.");
 
         panel = FormBuilder.createFormBuilder()
-                .addLabeledComponent("LSP server path:", lspServerPathField, 1, false)
+                .addLabeledComponent("Server path:", lspServerPathField, 1, false)
                 .addLabeledComponent("LLM base URL:", llmBaseUrlField, 1, false)
                 .addLabeledComponent("LLM model:", llmModelField, 1, false)
                 .addLabeledComponent("LLM API key:", llmApiKeyField, 1, false)
