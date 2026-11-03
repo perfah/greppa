@@ -1,4 +1,6 @@
 jetbrains_plugin/target
+jetbrains_plugin/.gradle/
+jetbrains_plugin/build/
 lsp_server/target
 lsp_server/models
 .aider*
