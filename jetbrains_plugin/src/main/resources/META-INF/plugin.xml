@@ -1,8 +1,8 @@
 <idea-plugin>
     <id>com.perfah.greppa</id>
     <name>Greppa</name>
-    <version>1.0.6</version>
-    <vendor>Example</vendor>
+    <version>1.0.0</version>
+    <vendor>perfah</vendor>
 
     <description><![CDATA[
         An AI accelerated coding workflow that understands that some tasks are better done by you
