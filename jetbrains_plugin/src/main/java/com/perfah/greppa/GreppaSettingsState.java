@@ -55,17 +55,12 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
 
     /**
      * Minimum number of characters that must have changed since the last
-     * completed interpretation before writing triggers a new one; 0
-     * disables the automatic refresh while writing entirely (the document
+     * completed interpretation before writing triggers a new one; default value
+     * 0 disables the automatic refresh while writing entirely (the document
      * stays in sync, but only opening a file, switching tabs or the
-     * reload button re-analyze). Passed to the LSP server as the
-     * ANTIVIBER_AUTO_UPDATE_MIN_CHARS environment variable when the server
-     * is launched. The default of 50 re-analyzes only after a substantial
-     * edit instead of on every keystroke; 1 was the behavior before this
-     * setting existed. Like the other settings, a change takes effect the
-     * next time the LSP server is started.
+     * reload button re-analyze).
      */
-    public int autoUpdateMinChars = 50;
+    public int autoUpdateMinChars = 0;
 
     /**
      * Service name under which the API key is stored in the IDE's
