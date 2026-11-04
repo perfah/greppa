@@ -36,7 +36,7 @@ dependencies {
         // replaces the local RustRover installation the old
         // classpath-jar build compiled against: the build is
         // self-contained and runs anywhere, including a CI runner.
-        rustRover("2024.2.3")
+        rustRover("2026.2.3")
         // The bundled Markdown plugin's classes (org.intellij.markdown),
         // which MarkdownParser renders the analysis with; mirrors the
         // <depends>org.intellij.plugins.markdown</depends> in plugin.xml.
