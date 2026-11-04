@@ -68,7 +68,7 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         toolWindow.getContentManager().addContent(interpretContent);
         toolWindow.getContentManager().addContent(improveContent);
         toolWindow.getContentManager().addContent(relateContent);
-        toolWindow.getContentManager().addContent(etcContent);
+        //toolWindow.getContentManager().addContent(etcContent);
 
         // The title bar holds only the settings action. The reload action
         // was removed as redundant with the panels' Refresh button (next
