@@ -1,4 +1,4 @@
-package com.example.greppa;
+package com.perfah.greppa;
 
 import com.intellij.openapi.options.Configurable;
 import org.jetbrains.annotations.Nls;

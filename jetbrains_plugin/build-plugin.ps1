@@ -186,7 +186,7 @@ foreach ($class in $requiredClasses) {
 # The Topic/goal input must be inside the compiled HintsPanel. If it is
 # missing, the HintsPanel.java on disk is still the old version and the
 # field can never appear in the IDE.
-$panelMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.example.greppa.HintsPanel
+$panelMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.perfah.greppa.HintsPanel
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect HintsPanel.class inside the plugin jar."
     exit 1
@@ -199,7 +199,7 @@ if (-not ($panelMembers | Select-String -SimpleMatch "topicField")) {
 # The poller must have the trigger file writer. If not, the
 # HintsFilePoller.java on disk is still the old version and the reload
 # button cannot ask the server for a fresh analysis.
-$pollerMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.example.greppa.HintsFilePoller
+$pollerMembers = & "$javaHome\bin\javap.exe" -p -classpath $pluginJar com.perfah.greppa.HintsFilePoller
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect HintsFilePoller.class inside the plugin jar."
     exit 1
@@ -212,7 +212,7 @@ if (-not ($pollerMembers | Select-String -SimpleMatch "writeTriggerFile")) {
 # The tab-switch listener must use the trigger file mechanism. If not,
 # the LspTabSelectionListener.java on disk is still the old version and
 # tab switches keep doing nothing.
-$tabBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.example.greppa.LspTabSelectionListener
+$tabBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.perfah.greppa.LspTabSelectionListener
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect LspTabSelectionListener.class inside the plugin jar."
     exit 1
@@ -227,7 +227,7 @@ if (-not ($tabBytecode | Select-String -SimpleMatch "writeTriggerFile")) {
 # LspTabSelectionListener subscription). If it is missing, tab switches
 # keep doing nothing because the HintsToolWindowFactory.java on disk is
 # still the old version.
-$factoryBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.example.greppa.HintsToolWindowFactory
+$factoryBytecode = & "$javaHome\bin\javap.exe" -c -p -classpath $pluginJar com.perfah.greppa.HintsToolWindowFactory
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to inspect HintsToolWindowFactory.class inside the plugin jar."
     exit 1

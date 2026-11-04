@@ -1,4 +1,4 @@
-package com.example.greppa;
+package com.perfah.greppa;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;

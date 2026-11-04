@@ -1,4 +1,4 @@
-package com.example.greppa;
+package com.perfah.greppa;
 
 import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;

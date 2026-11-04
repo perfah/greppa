@@ -1,4 +1,4 @@
-package com.example.greppa;
+package com.perfah.greppa;
 
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.LogicalPosition;

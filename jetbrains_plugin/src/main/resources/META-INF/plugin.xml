@@ -1,5 +1,5 @@
 <idea-plugin>
-    <id>com.example.greppa</id>
+    <id>com.perfah.greppa</id>
     <name>Greppa</name>
     <version>1.0.6</version>
     <vendor>Example</vendor>
@@ -19,17 +19,17 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <platform.lsp.serverSupportProvider
-                implementation="com.example.greppa.GreppaLspServerSupportProvider"/>
+                implementation="com.perfah.greppa.GreppaLspServerSupportProvider"/>
         <applicationConfigurable
                 parentId="tools"
-                instance="com.example.greppa.GreppaSettingsConfigurable"
-                id="com.example.greppa.GreppaSettingsConfigurable"
+                instance="com.perfah.greppa.GreppaSettingsConfigurable"
+                id="com.perfah.greppa.GreppaSettingsConfigurable"
                 displayName="Greppa LSP Server"/>
         <applicationService
-                serviceImplementation="com.example.greppa.GreppaSettingsState"/>
+                serviceImplementation="com.perfah.greppa.GreppaSettingsState"/>
         <toolWindow id="Greppa"
                     anchor="right"
-                    factoryClass="com.example.greppa.HintsToolWindowFactory"
+                    factoryClass="com.perfah.greppa.HintsToolWindowFactory"
                     icon="/icon.svg"
                     canCloseContents="false"/>
         <!-- Ranks the Greppa LSP completion item to the top of the
@@ -37,18 +37,18 @@
              makes it the leading sorting criterion, ahead of any other
              custom weigher (e.g. one registered by the Rust plugin). -->
         <lookup.elementWeigher
-                implementationClass="com.example.greppa.GreppaCompletionWeigher"
+                implementationClass="com.perfah.greppa.GreppaCompletionWeigher"
                 order="first"/>
         <!-- Subscribes, once per project after startup, the save listener
              that refreshes the analysis when a document is saved (Ctrl+S,
              Save All, autosave) by writing the tick trigger file the
              reload button uses; see GreppaProjectActivity. -->
-        <postStartupActivity implementation="com.example.greppa.GreppaProjectActivity"/>
+        <postStartupActivity implementation="com.perfah.greppa.GreppaProjectActivity"/>
     </extensions>
 
     <actions>
-        <action id="com.example.greppa.OpenGreppaSettings"
-                class="com.example.greppa.OpenGreppaSettingsAction"
+        <action id="com.perfah.greppa.OpenGreppaSettings"
+                class="com.perfah.greppa.OpenGreppaSettingsAction"
                 text="Greppa Settings"
                 description="Open Greppa LSP Server settings">
             <add-to-group group-id="ToolsMenu" anchor="last"/>

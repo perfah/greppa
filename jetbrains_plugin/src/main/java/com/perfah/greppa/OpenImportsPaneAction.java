@@ -1,4 +1,4 @@
-package com.example.greppa;
+package com.perfah.greppa;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;

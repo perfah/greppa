@@ -1,4 +1,4 @@
-package com.example.greppa
+package com.perfah.greppa
 
 import com.intellij.openapi.components.ProjectComponent
 import com.intellij.openapi.diagnostic.Logger

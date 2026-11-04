@@ -1,4 +1,4 @@
-package com.example.greppa;
+package com.perfah.greppa;
 
 import com.intellij.credentialStore.CredentialAttributes;
 import com.intellij.credentialStore.Credentials;
@@ -13,7 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 @State(
-        name = "com.example.greppa.GreppaSettingsState",
+        name = "com.perfah.greppa.GreppaSettingsState",
         storages = @Storage("GreppaSettings.xml")
 )
 public class GreppaSettingsState implements PersistentStateComponent<GreppaSettingsState> {
@@ -74,7 +74,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * password storage settings.
      */
     private static final String API_KEY_SERVICE_NAME =
-            "com.example.greppa.GreppaSettingsState.llmApiKey";
+            "com.perfah.greppa.GreppaSettingsState.llmApiKey";
 
     /** Account name of the PasswordSafe entry holding the API key. */
     private static final String API_KEY_ACCOUNT_NAME = "greppa";

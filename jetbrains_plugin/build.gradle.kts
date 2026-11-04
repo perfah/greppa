@@ -17,7 +17,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.+"
 }
 
-group = "com.example"
+group = "com.perfah"
 // Keep in sync with the <version> in plugin.xml.
 version = "1.0.6"
 

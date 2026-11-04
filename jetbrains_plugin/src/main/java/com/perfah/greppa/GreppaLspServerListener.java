@@ -1,4 +1,4 @@
-package com.example.greppa;
+package com.perfah.greppa;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
