@@ -109,7 +109,17 @@ tasks {
             }
         }
         from(serverBinariesDir) {
-            into("bin")
+            // prepareSandbox's copy root is the sandbox root - the PARENT
+            // of the plugin directory; the task itself places the plugin's
+            // jars at <pluginName>/lib. into("bin") therefore landed the
+            // binaries NEXT TO the plugin folder, outside the directory
+            // buildPlugin packages into the zip and outside the bin/ the
+            // descriptor searches at runtime - so the zips carried no
+            // bundled server. Mirroring the lib/ placement with the
+            // task's pluginName puts them beside lib/, inside the plugin
+            // directory, whatever it is named ("greppa" here, "idea" in
+            // the idea subproject).
+            into(pluginName.get() + "/bin")
         }
     }
 }

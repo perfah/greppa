@@ -89,7 +89,11 @@ tasks {
             }
         }
         from(serverBinariesDir) {
-            into("bin")
+            // See the root build.gradle.kts: the copy root is the sandbox
+            // root, not the plugin directory, so the binaries must go to
+            // <pluginName>/bin to land inside the plugin folder - which
+            // is named "idea" in this subproject, not "greppa".
+            into(pluginName.get() + "/bin")
         }
     }
 }
