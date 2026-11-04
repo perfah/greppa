@@ -70,13 +70,12 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         toolWindow.getContentManager().addContent(relateContent);
         toolWindow.getContentManager().addContent(etcContent);
 
-        // The Imports action sits between Reload and Settings, so the
-        // button that opens the Relate tab (whose top manages the files
-        // attached to the analysis) is directly left of the settings
-        // gear.
+        // The title bar holds only the settings action. The reload action
+        // was removed as redundant with the panels' Refresh button (next
+        // to Pause/Unpause), which also forces a re-analysis through
+        // HintsFilePoller.pollNow; the imports action was removed because
+        // the Relate tab it opened is directly clickable in the tab strip.
         List<AnAction> titleActions = Arrays.asList(
-                new RefreshHintsAction(),
-                new OpenImportsPaneAction(),
                 new OpenGreppaSettingsAction()
         );
         toolWindow.setTitleActions(titleActions);
