@@ -23,9 +23,14 @@ version = "1.0.6"
 
 java {
     toolchain {
-        // 17 matches the oldest IDE the plugin supports (since-build
-        // 232); the IDE itself may run a newer JBR.
-        languageVersion = JavaLanguageVersion.of(17)
+        // 25 because the targeted 2026.x IDE distributions ship their
+        // platform jars compiled with class file version 69 (Java 25),
+        // and javac cannot read class files newer than the JDK it runs
+        // on: compiling against RustRover 2026.2.3 with a 17 toolchain
+        // fails with "class file has wrong version 69.0, should be
+        // 61.0". The foojay resolver in settings.gradle.kts downloads
+        // a matching JDK when no local installation does.
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
