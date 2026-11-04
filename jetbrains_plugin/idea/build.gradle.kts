@@ -71,21 +71,24 @@ dependencies {
 }
 
 // The same Rust server binary bundling as the root project; see the
-// comments there for the rationale.
-val serverBinaryName =
-    if (System.getProperty("os.name").startsWith("Windows")) "lsp_server.exe" else "lsp_server"
-val serverBinary = rootProject.file("../lsp_server/target/release/$serverBinaryName")
+// comments there for the rationale, the staging directory and the
+// platform-specific binary names.
+val serverBinariesDir = rootProject.file("../lsp_server/bin")
 
 tasks {
     prepareSandbox {
         doFirst {
-            if (!serverBinary.exists()) {
+            val staged = serverBinariesDir.listFiles()?.filter { it.isFile }.orEmpty()
+            if (staged.isEmpty()) {
                 throw GradleException(
-                    "Greppa server binary not found at $serverBinary. " +
-                        "Build it first: cd lsp_server && cargo build --release")
+                    "No Greppa server binaries staged in $serverBinariesDir. " +
+                        "CI stages the three platform binaries there; locally, build the server " +
+                        "(cd lsp_server && cargo build --release) and copy target/release/lsp_server(.exe) " +
+                        "into lsp_server/bin under its platform name (see the comment in build.gradle.kts)."
+                )
             }
         }
-        from(serverBinary) {
+        from(serverBinariesDir) {
             into("bin")
         }
     }

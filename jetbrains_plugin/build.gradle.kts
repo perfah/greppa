@@ -75,28 +75,40 @@ dependencies {
     compileOnly("org.jetbrains:annotations:24.0.0")
 }
 
-// The Rust server binary bundled into the plugin distribution: the
-// prepareSandbox task copies it into the plugin's bin/ directory, so a
-// fresh install runs without a separate download - the descriptor
-// launches it whenever the Server path setting is empty (see
+// The Rust server binaries bundled into the plugin distribution: the
+// prepareSandbox task copies every file from the staging directory into
+// the plugin's bin/ directory, so a fresh install runs without a
+// separate download - the descriptor launches the binary for the
+// current OS whenever the Server path setting is empty (see
 // GreppaLspServerDescriptor), and a configured path overrides it for
-// custom builds. The binary is built beforehand with cargo; the build
-// fails when it is missing instead of silently producing a
-// distribution that cannot run.
-val serverBinaryName =
-    if (System.getProperty("os.name").startsWith("Windows")) "lsp_server.exe" else "lsp_server"
-val serverBinary = rootProject.file("../lsp_server/target/release/$serverBinaryName")
+// custom builds.
+//
+// The staging directory holds one binary per platform, named by OS and
+// arch (lsp_server-windows-x64.exe, lsp_server-macos-arm64,
+// lsp_server-linux-x64) - the names GreppaLspServerDescriptor looks up
+// at runtime. CI builds all three and stages them here (see
+// .github/workflows/build.yml); locally, copy your cargo build output
+// there once, e.g.:
+//   cp lsp_server/target/release/lsp_server.exe lsp_server/bin/lsp_server-windows-x64.exe
+// A distribution with fewer binaries still builds and runs on the
+// platforms it does contain, so local dev builds do not need all
+// three.
+val serverBinariesDir = rootProject.file("../lsp_server/bin")
 
 tasks {
     prepareSandbox {
         doFirst {
-            if (!serverBinary.exists()) {
+            val staged = serverBinariesDir.listFiles()?.filter { it.isFile }.orEmpty()
+            if (staged.isEmpty()) {
                 throw GradleException(
-                    "Greppa server binary not found at $serverBinary. " +
-                        "Build it first: cd lsp_server && cargo build --release")
+                    "No Greppa server binaries staged in $serverBinariesDir. " +
+                        "CI stages the three platform binaries there; locally, build the server " +
+                        "(cd lsp_server && cargo build --release) and copy target/release/lsp_server(.exe) " +
+                        "into lsp_server/bin under its platform name (see the comment in build.gradle.kts)."
+                )
             }
         }
-        from(serverBinary) {
+        from(serverBinariesDir) {
             into("bin")
         }
     }

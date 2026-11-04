@@ -1,0 +1,116 @@
+# Builds the Rust server binaries for every supported platform and the
+# plugin zips for both IDE targets, and publishes a GitHub Release with
+# the zips - but only for version tags (v1.0.0): a plain push only
+# produces the workflow's build artifacts, so the release list stays
+# signal instead of accumulating one release per commit.
+#
+# The server binaries are built on each platform's native runner, so no
+# cross-compilation toolchains are needed: windows-latest is x64,
+# macos-latest is arm64 (Apple Silicon) and ubuntu-latest is x64. Each
+# binary is staged under the platform-specific name the plugin's
+# descriptor looks up at runtime (see
+# GreppaLspServerDescriptor.bundledBinaryName) and that the Gradle build
+# bundles from lsp_server/bin (see the prepareSandbox block in
+# build.gradle.kts).
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  server:
+    name: Server binary (${{ matrix.staged }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            binary: lsp_server.exe
+            staged: lsp_server-windows-x64.exe
+          - os: macos-latest
+            binary: lsp_server
+            staged: lsp_server-macos-arm64
+          - os: ubuntu-latest
+            binary: lsp_server
+            staged: lsp_server-linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: lsp_server
+      - name: Build
+        run: cargo build --release
+        working-directory: lsp_server
+      - name: Stage
+        shell: bash
+        run: |
+          mkdir -p lsp_server/bin
+          cp "lsp_server/target/release/${{ matrix.binary }}" "lsp_server/bin/${{ matrix.staged }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.staged }}
+          path: lsp_server/bin/${{ matrix.staged }}
+
+  plugin:
+    needs: server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # All three platform binaries, merged into the staging directory
+      # the Gradle build bundles from.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: server-*
+          merge-multiple: true
+          path: lsp_server/bin
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      # The unqualified buildPlugin task name runs in every Gradle project
+      # that has it, so one invocation builds both the RustRover zip (the
+      # root project) and the IntelliJ IDEA zip (the idea subproject).
+      # chmod guards against the wrapper's executable bit being lost when
+      # the scripts were committed from Windows.
+      - name: Build plugin zips
+        working-directory: jetbrains_plugin
+        run: |
+          chmod +x gradlew
+          ./gradlew buildPlugin
+      # Both Gradle projects name their zip greppa-<version>.zip, so the
+      # zips are renamed per target before uploading; a release then shows
+      # which IDE each zip was built against.
+      - name: Rename zips
+        shell: bash
+        run: |
+          mkdir -p dist
+          for zip in jetbrains_plugin/build/distributions/*.zip; do
+            cp "$zip" "dist/$(basename "$zip" .zip)-rustrover.zip"
+          done
+          for zip in jetbrains_plugin/idea/build/distributions/*.zip; do
+            cp "$zip" "dist/$(basename "$zip" .zip)-idea.zip"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-zips
+          path: dist/*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: plugin
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-zips
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate-release-notes: true

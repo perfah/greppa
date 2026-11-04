@@ -28,8 +28,8 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
 
     /**
      * Directory inside the plugin installation that holds the bundled
-     * server binary; the Gradle build puts it there (see the
-     * prepareSandbox block in build.gradle.kts).
+     * server binaries, one per platform; the Gradle build puts them
+     * there (see the prepareSandbox block in build.gradle.kts).
      */
     private static final String BUNDLED_SERVER_DIR = "bin";
 
@@ -130,7 +130,7 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
 
         File bundled = bundledServerFile();
         if (bundled == null) {
-            String message = "No Greppa server available: the Server path setting is empty and the plugin installation contains no bundled server binary. Set the server path under Settings | Tools | Greppa.";
+            String message = "No Greppa server available: the Server path setting is empty and the plugin installation contains no bundled server binary for this platform. Set the server path under Settings | Tools | Greppa.";
             LOG.error(message);
             throw new RuntimeException(message);
         }
@@ -139,11 +139,12 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
     }
 
     /**
-     * Returns the server binary bundled with the plugin distribution
-     * (bin/ inside the plugin's installation directory), or null when
-     * the plugin cannot be resolved or the binary is absent - e.g. a
-     * distribution built without it (see the prepareSandbox block in
-     * build.gradle.kts).
+     * Returns the server binary bundled with the plugin distribution for
+     * the platform the IDE runs on (bin/ inside the plugin's installation
+     * directory), or null when the plugin cannot be resolved or the
+     * platform's binary is absent - e.g. a distribution built without it
+     * (see the prepareSandbox block in build.gradle.kts), or an Intel
+     * Mac, whose platform is not bundled (see bundledBinaryName).
      */
     @Nullable
     private static File bundledServerFile() {
@@ -151,9 +152,28 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         if (plugin == null) {
             return null;
         }
-        String binaryName = SystemInfo.isWindows ? "lsp_server.exe" : "lsp_server";
-        File binary = plugin.getPluginPath().resolve(BUNDLED_SERVER_DIR).resolve(binaryName).toFile();
+        File binary = plugin.getPluginPath().resolve(BUNDLED_SERVER_DIR).resolve(bundledBinaryName()).toFile();
         return binary.exists() ? binary : null;
+    }
+
+    /**
+     * The platform-specific name of the bundled server binary, picked by
+     * the OS the IDE runs on. The Gradle build bundles one binary per
+     * platform into the plugin's bin/ directory, and CI builds and stages
+     * all three (see .github/workflows/build.yml):
+     * lsp_server-windows-x64.exe, lsp_server-macos-arm64 and
+     * lsp_server-linux-x64. macOS is arm64-only for now, so an Intel Mac
+     * finds no binary and the launch fails with the missing bundled
+     * server message above.
+     */
+    private static String bundledBinaryName() {
+        if (SystemInfo.isMac) {
+            return "lsp_server-macos-arm64";
+        }
+        if (SystemInfo.isWindows) {
+            return "lsp_server-windows-x64.exe";
+        }
+        return "lsp_server-linux-x64";
     }
 
     // No getLspCompletionSupport override: an earlier version tried to sort
