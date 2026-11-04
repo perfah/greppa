@@ -9,9 +9,22 @@ tower-lsp = "0.20.0"
 tower = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-async-openai = "0.14"
-# Consuming the token stream from the Ollama streaming endpoint
-# (futures::StreamExt in ollama_tick_listener.rs).
+# The LLM client, pointed at any OpenAI-compatible service (see
+# llm_base_url in tick_listener.rs). native-tls instead of the crate's
+# default rustls backend: the default enables reqwest/rustls-tls, whose
+# rustls -> ring chain does not compile on aarch64-apple-darwin with
+# current Rust - ring's compile-time CPU-feature assertions
+# (src/cpu/arm/darwin.rs) panic with E0080, which broke the macOS CI
+# leg while Windows and Linux built fine. native-tls uses the OS's TLS
+# stack instead (Security.framework on macOS, schannel on Windows,
+# OpenSSL on Linux), so ring leaves the dependency tree entirely and
+# the CI toolchain needs no version pin. TLS is only exercised for
+# hosted services anyway; the default base URL is a local Ollama over
+# plain HTTP. Linux builds need OpenSSL's headers (GitHub's ubuntu
+# runners ship them).
+async-openai = { version = "0.14", default-features = false, features = ["native-tls"] }
+# Consuming the token stream from the streaming endpoint
+# (futures::StreamExt in tick_listener.rs).
 futures = "0.3"
 anyhow = "1.0"
 dashmap = "6.1.0"
