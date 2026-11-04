@@ -223,16 +223,17 @@ public class HintsPanel extends JPanel {
         panel.setBorder(new EmptyBorder(16, 16, 16, 16));
 
         // Shown only when no analysis file exists for the current file at
-        // all - the server missing or misconfigured, or nothing ever
-        // analyzed. While an analysis is generating, the server writes a
-        // "Generating interpretation..." placeholder to the analysis file,
-        // so the panel shows that instead and this card stays hidden.
+        // all - the AI service unreachable or misconfigured, or nothing
+        // ever analyzed. While an analysis is generating, the server
+        // writes a "Generating interpretation..." placeholder to the
+        // analysis file, so the panel shows that instead and this card
+        // stays hidden.
         placeholderLabel.setText(
                 "<html><center>" +
                 "No interpretation yet.<br>" +
-                "Open a file and make sure the Greppa LSP server path is configured in<br>" +
-                "<b>Settings | Tools | Greppa LSP Server</b>.<br>" +
-                "Use the reload button in the tool window toolbar to refresh." +
+                "Open a file to generate its interpretation.<br>" +
+                "If none appears, check the AI service settings in<br>" +
+                "<b>Settings | Tools | Greppa</b>." +
                 "</center></html>"
         );
         placeholderLabel.setHorizontalAlignment(SwingConstants.CENTER);
@@ -292,7 +293,7 @@ public class HintsPanel extends JPanel {
         refreshButton.addActionListener(e -> applyTopic());
 
         pauseButton.setToolTipText(
-                "Pause the LSP server's interpretations and AI completions so no LLM tokens are spent. "
+                "Pause interpretations and AI completions so no tokens are spent on them. "
                         + "The current interpretation stays visible; resuming re-generates the current file's interpretation.");
         syncPauseButton();
         pauseButton.addActionListener(e -> setPaused(pauseButton.isSelected()));

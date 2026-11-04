@@ -36,6 +36,10 @@ public class GreppaSettingsComponent {
                 null,
                 new FileChooserDescriptor(true, false, false, false, false, false)
         );
+        lspServerPathField.setToolTipText(
+                "Path to the Greppa server executable. Leave empty to use the server bundled with the plugin; "
+                        + "set it to launch a custom build instead. "
+                        + "Takes effect the next time the server is started.");
 
         llmBaseUrlField.setToolTipText(
                 "OpenAI-compatible base URL of the LLM service, including the version path, "
@@ -46,26 +50,26 @@ public class GreppaSettingsComponent {
         llmModelField.setToolTipText(
                 "LLM model used for analyses and completions, e.g. 'qwen2.5-coder:7b' (Ollama) "
                         + "or 'gpt-4o-mini' (OpenAI). "
-                        + "Empty = the default model 'gemma4:31b-cloud' (an Ollama tag).");
+                        + "Empty = the default model 'gemma4:31b-cloud' "
+                        + "(run 'ollama pull gemma4:31b-cloud' once to install it).");
 
         llmApiKeyField.setToolTipText(
-                "API key (bearer token) for the LLM service. Local services such as Ollama ignore it; "
-                        + "hosted services require it. "
-                        + "Empty = the built-in placeholder key 'ollama'.");
+                "API key for the LLM service. Hosted services (OpenAI, Anthropic) require it; "
+                        + "local services such as Ollama don't. Empty = no key.");
 
         // Free text, so wrap lines instead of growing one long line.
         guidelineField.setLineWrap(true);
         guidelineField.setWrapStyleWord(true);
         guidelineField.setToolTipText(
                 "Free-text standing instructions for the LLM, e.g. 'prefer functional style, never suggest unsafe code'. "
-                        + "Injected into the analysis and completion prompts. Empty = no guideline. "
+                        + "Applied to all interpretations and completions. Empty = no guideline. "
                         + "Takes effect the next time the server is started.");
 
         autoUpdateMinCharsField.setToolTipText(
                 "Minimum number of characters that must have changed since the last interpretation "
-                        + "before writing triggers a new one. 0 disables the automatic refresh while writing; "
-                        + "opening a file, switching tabs and the reload button still re-analyze. "
-                        + "Default: 50. "
+                        + "before typing triggers a new one. 0 disables the automatic refresh while typing; "
+                        + "opening a file, switching tabs and the Refresh button still re-analyze. "
+                        + "Default: 0 (automatic refresh off). "
                         + "Takes effect the next time the server is started.");
 
         panel = FormBuilder.createFormBuilder()

@@ -18,7 +18,17 @@ import org.jetbrains.annotations.Nullable;
 )
 public class GreppaSettingsState implements PersistentStateComponent<GreppaSettingsState> {
 
-    public String lspServerPath = "C:\\source\\greppa\\lsp_server\\target\\release\\lsp_server.exe";
+    /**
+     * Path to the Greppa server executable the plugin launches. Empty by
+     * default: the plugin then launches the server binary bundled with its
+     * own distribution (see GreppaLspServerDescriptor), so a fresh install
+     * works without any path setup; a configured path overrides the
+     * bundled binary, e.g. for a local development build. The previous
+     * default was a hardcoded development-machine path, which prefilled
+     * every fresh install with a path that does not exist there - looking
+     * configured while never working.
+     */
+    public String lspServerPath = "";
 
     /**
      * Base URL of the LLM service's OpenAI-compatible chat completions
@@ -58,7 +68,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * completed interpretation before writing triggers a new one; default value
      * 0 disables the automatic refresh while writing entirely (the document
      * stays in sync, but only opening a file, switching tabs or the
-     * reload button re-analyze).
+     * Refresh button re-analyze).
      */
     public int autoUpdateMinChars = 0;
 

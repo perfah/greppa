@@ -1,8 +1,12 @@
 package com.perfah.greppa;
 
 import com.intellij.execution.configurations.GeneralCommandLine;
+import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.platform.lsp.api.LspServer;
 import com.intellij.platform.lsp.api.LspServerDescriptor;
@@ -16,8 +20,21 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
 
     private static final Logger LOG = Logger.getInstance(GreppaLspServerDescriptor.class);
 
+    /**
+     * The plugin's id from plugin.xml, used to locate the plugin's own
+     * installation directory and with it the bundled server binary.
+     */
+    private static final String PLUGIN_ID = "com.perfah.greppa";
+
+    /**
+     * Directory inside the plugin installation that holds the bundled
+     * server binary; the Gradle build puts it there (see the
+     * prepareSandbox block in build.gradle.kts).
+     */
+    private static final String BUNDLED_SERVER_DIR = "bin";
+
     public GreppaLspServerDescriptor(@NotNull Project project) {
-        super(project, "Greppa LSP Server");
+        super(project, "Greppa");
     }
 
     @Override
@@ -32,26 +49,7 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
 
         LOG.info("GreppaLspServerDescriptor.createCommandLine called with server path: " + serverPath);
 
-        if (serverPath == null || serverPath.isBlank()) {
-            String message = "Greppa LSP server path is not configured. Set it in Settings | Tools | Greppa LSP Server.";
-            LOG.error(message);
-            throw new RuntimeException(message);
-        }
-
-        File serverFile = new File(serverPath);
-        if (!serverFile.isAbsolute()) {
-            String basePath = getProject().getBasePath();
-            if (basePath != null) {
-                serverFile = new File(basePath, serverPath);
-                LOG.info("Resolved relative server path against project base path: " + serverFile.getAbsolutePath());
-            }
-        }
-
-        if (!serverFile.exists()) {
-            String message = "Greppa LSP server binary does not exist: " + serverFile.getAbsolutePath();
-            LOG.error(message);
-            throw new RuntimeException(message);
-        }
+        File serverFile = resolveServerFile(serverPath);
 
         GeneralCommandLine commandLine = new GeneralCommandLine();
         commandLine.setExePath(serverFile.getAbsolutePath());
@@ -94,14 +92,68 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         // characters that must have changed since the last completed
         // analysis before typing triggers a new one; 0 disables the
         // auto-refresh while writing. Always passed, because the setting
-        // is an int with a default rather than an optional string, and
-        // the server's built-in default (50) matches the field's default.
+        // is an int with a default rather than an optional string; the
+        // server's own fallback only applies when the variable is unset,
+        // which does not happen when the plugin launches the server.
         commandLine.withEnvironment(
                 "ANTIVIBER_AUTO_UPDATE_MIN_CHARS",
                 String.valueOf(settings.autoUpdateMinChars));
         LOG.info("Setting ANTIVIBER_AUTO_UPDATE_MIN_CHARS to " + settings.autoUpdateMinChars);
         LOG.info("Greppa LSP command line: " + commandLine.getCommandLineString());
         return commandLine;
+    }
+
+    /**
+     * Resolves the server executable to launch: the configured path when
+     * the Server path setting is non-empty, otherwise the binary bundled
+     * with the plugin's own distribution, so a fresh install runs with
+     * no path setup at all. Throws when neither exists - the plugin
+     * cannot run without a server.
+     */
+    private File resolveServerFile(String configuredPath) {
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            File serverFile = new File(configuredPath);
+            if (!serverFile.isAbsolute()) {
+                String basePath = getProject().getBasePath();
+                if (basePath != null) {
+                    serverFile = new File(basePath, configuredPath);
+                    LOG.info("Resolved relative server path against project base path: " + serverFile.getAbsolutePath());
+                }
+            }
+            if (!serverFile.exists()) {
+                String message = "Greppa server binary does not exist: " + serverFile.getAbsolutePath();
+                LOG.error(message);
+                throw new RuntimeException(message);
+            }
+            return serverFile;
+        }
+
+        File bundled = bundledServerFile();
+        if (bundled == null) {
+            String message = "No Greppa server available: the Server path setting is empty and the plugin installation contains no bundled server binary. Set the server path under Settings | Tools | Greppa.";
+            LOG.error(message);
+            throw new RuntimeException(message);
+        }
+        LOG.info("Using the server binary bundled with the plugin: " + bundled.getAbsolutePath());
+        return bundled;
+    }
+
+    /**
+     * Returns the server binary bundled with the plugin distribution
+     * (bin/ inside the plugin's installation directory), or null when
+     * the plugin cannot be resolved or the binary is absent - e.g. a
+     * distribution built without it (see the prepareSandbox block in
+     * build.gradle.kts).
+     */
+    @Nullable
+    private static File bundledServerFile() {
+        IdeaPluginDescriptor plugin = PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID));
+        if (plugin == null) {
+            return null;
+        }
+        String binaryName = SystemInfo.isWindows ? "lsp_server.exe" : "lsp_server";
+        File binary = plugin.getPluginPath().resolve(BUNDLED_SERVER_DIR).resolve(binaryName).toFile();
+        return binary.exists() ? binary : null;
     }
 
     // No getLspCompletionSupport override: an earlier version tried to sort

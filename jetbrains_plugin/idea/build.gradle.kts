@@ -69,3 +69,24 @@ dependencies {
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.jetbrains:annotations:24.0.0")
 }
+
+// The same Rust server binary bundling as the root project; see the
+// comments there for the rationale.
+val serverBinaryName =
+    if (System.getProperty("os.name").startsWith("Windows")) "lsp_server.exe" else "lsp_server"
+val serverBinary = rootProject.file("../lsp_server/target/release/$serverBinaryName")
+
+tasks {
+    prepareSandbox {
+        doFirst {
+            if (!serverBinary.exists()) {
+                throw GradleException(
+                    "Greppa server binary not found at $serverBinary. " +
+                        "Build it first: cd lsp_server && cargo build --release")
+            }
+        }
+        from(serverBinary) {
+            into("bin")
+        }
+    }
+}
