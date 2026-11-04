@@ -6,3 +6,10 @@ plugins {
 }
 
 rootProject.name = "greppa"
+
+// The IntelliJ IDEA build target. The IntelliJ Platform Gradle Plugin
+// allows exactly one platform dependency per Gradle project, so every
+// IDE the plugin is built against is its own project compiling the
+// same sources: the root project targets RustRover, this subproject
+// targets IntelliJ IDEA (see idea/build.gradle.kts).
+include("idea")

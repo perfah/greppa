@@ -5,7 +5,16 @@ plugins {
     // distributable zip and provides the runIde/verifyPlugin tasks -
     // the standard replacement for the hand-rolled Maven build with
     // its generated classpath jar.
-    id("org.jetbrains.intellij.platform") version "2.2.1"
+    //
+    // "2.+" resolves the newest 2.x from the Gradle Plugin Portal at
+    // build time. The previously pinned 2.2.1 predates the Gradle
+    // version the wrapper uses and fails under it with "No IntelliJ
+    // Platform dependency found" - the plugin's own validation, fired
+    // because its IDE dependency never reaches the compile classpath.
+    // Once the build is green, pin the resolved concrete version (the
+    // "gradlew buildEnvironment" output names it) so builds stay
+    // reproducible. Keep this version in sync with idea/build.gradle.kts.
+    id("org.jetbrains.intellij.platform") version "2.+"
 }
 
 group = "com.example"
@@ -31,11 +40,12 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        // The IDE the plugin targets. Downloaded from JetBrains on the
-        // first build and cached in the Gradle cache afterwards, which
-        // replaces the local RustRover installation the old
-        // classpath-jar build compiled against: the build is
+        // The IDE this project targets: RustRover. Downloaded from
+        // JetBrains on the first build and cached in the Gradle cache
+        // afterwards, which replaces the local RustRover installation
+        // the old classpath-jar build compiled against: the build is
         // self-contained and runs anywhere, including a CI runner.
+        // The IntelliJ IDEA target lives in the idea/ subproject.
         rustRover("2026.2.3")
         // The bundled Markdown plugin's classes (org.intellij.markdown),
         // which MarkdownParser renders the analysis with; mirrors the
