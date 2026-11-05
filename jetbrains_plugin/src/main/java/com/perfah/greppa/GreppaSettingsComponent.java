@@ -115,9 +115,12 @@ public class GreppaSettingsComponent {
         // and it names the actionable instruction (restart the IDE)
         // rather than the mechanism ("the next time the server is
         // started"). Rendered in the context-help color so it reads as a
-        // note, not as another form label.
+        // note, not as another form label. The color is set through
+        // setForeground, not JBLabel.setFontColor: in this IDE build
+        // setFontColor takes the new UI's FontColor type, not a
+        // java.awt.Color.
         JBLabel restartNote = new JBLabel("All changes take effect after the IDE is restarted.");
-        restartNote.setFontColor(UIUtil.getContextHelpForeground());
+        restartNote.setForeground(UIUtil.getContextHelpForeground());
 
         // The section checkboxes in one single-column panel, added to
         // the form as a single component so the builder chain stays
