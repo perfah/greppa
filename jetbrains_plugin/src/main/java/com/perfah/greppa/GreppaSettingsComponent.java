@@ -1,7 +1,9 @@
 package com.perfah.greppa;
 
+import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.util.ui.FormBuilder;
+import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -48,15 +50,26 @@ public class GreppaSettingsComponent {
         guidelineField.setWrapStyleWord(true);
         guidelineField.setToolTipText(
                 "Free-text standing instructions for the LLM, e.g. 'prefer functional style, never suggest unsafe code'. "
-                        + "Applied to all interpretations and completions. Empty = no guideline. "
-                        + "Takes effect the next time the server is started.");
+                        + "Applied to all interpretations and completions. Empty = no guideline.");
 
         autoUpdateMinCharsField.setToolTipText(
                 "Minimum number of characters that must have changed since the last interpretation "
                         + "before typing triggers a new one. 0 disables the automatic refresh while typing; "
                         + "opening a file, switching tabs and the Refresh button still re-analyze. "
-                        + "Default: 0 (automatic refresh off). "
-                        + "Takes effect the next time the server is started.");
+                        + "Default: 0 (automatic refresh off).");
+
+        // The single restart note for the whole page. Every setting is
+        // passed to the server as an environment variable when the server
+        // is launched (see GreppaLspServerDescriptor.createCommandLine),
+        // and a running process's environment never changes, so no
+        // setting can take effect while the current server keeps running.
+        // One note at the bottom instead of a sentence in every tooltip,
+        // and it names the actionable instruction (restart the IDE)
+        // rather than the mechanism ("the next time the server is
+        // started"). Rendered in the context-help color so it reads as a
+        // note, not as another form label.
+        JBLabel restartNote = new JBLabel("All changes take effect after the IDE is restarted.");
+        restartNote.setFontColor(UIUtil.getContextHelpForeground());
 
         panel = FormBuilder.createFormBuilder()
                 .addLabeledComponent("LLM base URL:", llmBaseUrlField, 1, false)
@@ -64,6 +77,7 @@ public class GreppaSettingsComponent {
                 .addLabeledComponent("LLM API key:", llmApiKeyField, 1, false)
                 .addLabeledComponent("LLM guideline:", new JBScrollPane(guidelineField), 1, false)
                 .addLabeledComponent("Min. chars changed for auto-refresh:", autoUpdateMinCharsField, 1, false)
+                .addComponent(restartNote)
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
     }
