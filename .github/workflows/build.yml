@@ -12,6 +12,17 @@
 # GreppaLspServerDescriptor.bundledBinaryName) and that the Gradle build
 # bundles from lsp_server/bin (see the prepareSandbox block in
 # build.gradle.kts).
+#
+# The plugin zips are uploaded as ONE artifact per IDE target -
+# plugin-rustrover and plugin-intellij - each holding exactly the one
+# zip that installs via Settings | Plugins | Install Plugin from Disk.
+# The previous single plugin-zips artifact bundled both zips into one
+# download, which was neither separable per IDE nor itself installable
+# (the IDE cannot install a zip that contains two zips). Note that
+# GitHub's Actions UI always wraps an artifact download in one zip, so
+# the downloaded file still needs one extraction before the plugin zip
+# inside can be installed; the Release assets of a tag build are the
+# raw installable zips with no wrapper.
 name: Build
 
 on:
@@ -81,23 +92,36 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew buildPlugin
-      # Both Gradle projects name their zip greppa-<version>.zip, so the
-      # zips are renamed per target before uploading; a release then shows
-      # which IDE each zip was built against.
-      - name: Rename zips
+      # Each Gradle project names its zip after its own project name
+      # (greppa-<version>.zip for the root project, idea-<version>.zip
+      # for the idea subproject), but a shipped zip must name the IDE it
+      # was built against. Every zip is therefore copied to
+      # greppa-<version>-<target>.zip, with the version taken from the
+      # built zip's own file name so it cannot drift from the build.
+      - name: Rename zips per target
         shell: bash
         run: |
           mkdir -p dist
           for zip in jetbrains_plugin/build/distributions/*.zip; do
-            cp "$zip" "dist/$(basename "$zip" .zip)-rustrover.zip"
+            version=$(basename "$zip" .zip)
+            version=${version##*-}
+            cp "$zip" "dist/greppa-$version-rustrover.zip"
           done
           for zip in jetbrains_plugin/idea/build/distributions/*.zip; do
-            cp "$zip" "dist/$(basename "$zip" .zip)-idea.zip"
+            version=$(basename "$zip" .zip)
+            version=${version##*-}
+            cp "$zip" "dist/greppa-$version-intellij.zip"
           done
+      # One artifact per IDE target, each holding its single installable
+      # zip; see the workflow header comment.
       - uses: actions/upload-artifact@v4
         with:
-          name: plugin-zips
-          path: dist/*.zip
+          name: plugin-rustrover
+          path: dist/*-rustrover.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-intellij
+          path: dist/*-intellij.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -106,9 +130,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Both per-target artifacts, merged: their zip names differ, so
+      # they land side by side in dist/.
       - uses: actions/download-artifact@v4
         with:
-          name: plugin-zips
+          pattern: plugin-*
+          merge-multiple: true
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
