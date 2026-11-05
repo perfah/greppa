@@ -19,9 +19,11 @@
 # artifact holding the zip file would download as a zip containing the
 # plugin zip - one extraction too many, and not installable as
 # downloaded. With the folder uploaded, GitHub's wrapper IS the plugin
-# zip: the plugin-rustrover and plugin-intellij artifacts download as
+# zip: the greppa-rustrover and greppa-intellij artifacts download as
 # directly installable plugin zips (Settings | Plugins | Install Plugin
-# from Disk), exactly one per IDE target.
+# from Disk), exactly one per IDE target. The artifacts are named after
+# the plugin rather than generically, so a downloaded file says what it
+# is.
 #
 # One consequence is handled explicitly: artifact uploads do not
 # preserve file permissions, so the bundled macOS/Linux server binaries
@@ -114,7 +116,7 @@ jobs:
           unzip jetbrains_plugin/build/distributions/*.zip -d dist
       - uses: actions/upload-artifact@v4
         with:
-          name: plugin-rustrover
+          name: greppa-rustrover
           path: dist
 
   plugin-intellij:
@@ -150,7 +152,7 @@ jobs:
           unzip jetbrains_plugin/idea/build/distributions/*.zip -d dist
       - uses: actions/upload-artifact@v4
         with:
-          name: plugin-intellij
+          name: greppa-intellij
           path: dist
 
   release:
@@ -160,12 +162,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Both plugin artifacts, merged: their plugin folders differ
-      # (greppa/ from the RustRover build, idea/ from the IntelliJ IDEA
-      # build), so they land side by side in dist/.
+      # Both per-target artifacts (greppa-rustrover, greppa-intellij),
+      # merged: their plugin folders differ (greppa/ from the RustRover
+      # build, idea/ from the IntelliJ IDEA build), so they land side by
+      # side in dist/.
       - uses: actions/download-artifact@v4
         with:
-          pattern: plugin-*
+          pattern: greppa-*
           merge-multiple: true
           path: dist
       # The plugin jobs upload the extracted plugin folders (so the
