@@ -5,14 +5,12 @@ import com.intellij.openapi.fileEditor.FileEditorManagerListener;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
+import com.intellij.ui.OnePixelSplitter;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.JComponent;
-import javax.swing.JPanel;
-import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -135,16 +133,23 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
 
     /**
      * Builds the Relate tab: the attached-files management (the former
-     * Imports pane) as a strip at the top, the relationships to other
-     * files markdown below it. The strip's height is capped so the
-     * markdown keeps the bulk of the tab; the imports list scrolls
-     * within the cap.
+     * Imports pane) above the relationships to other files markdown,
+     * separated by a draggable divider instead of a fixed-height strip.
+     * The divider is the IDE's standard one-pixel splitter, so it looks
+     * and drags like every other divider in the IDE, and the imports
+     * list takes exactly as much room as the user drags it to - a
+     * sliver when the relationships are what matters, most of the tab
+     * while the attached files are being managed. The imports list
+     * scrolls within whatever height it gets.
      */
     private static JComponent buildRelateTab(ImportsPanel importsPanel, HintsPanel relatePanel) {
-        importsPanel.setPreferredSize(new Dimension(0, 220));
-        JPanel tab = new JPanel(new BorderLayout(0, 0));
-        tab.add(importsPanel, BorderLayout.NORTH);
-        tab.add(relatePanel, BorderLayout.CENTER);
-        return tab;
+        // A vertical splitter stacks its two components with a horizontal
+        // divider. The initial proportion gives the imports list about a
+        // quarter of the tab, roughly the fixed 220 px it occupied before
+        // the divider became draggable; dragging the divider changes it.
+        OnePixelSplitter splitter = new OnePixelSplitter(true, 0.25f);
+        splitter.setFirstComponent(importsPanel);
+        splitter.setSecondComponent(relatePanel);
+        return splitter;
     }
 }
