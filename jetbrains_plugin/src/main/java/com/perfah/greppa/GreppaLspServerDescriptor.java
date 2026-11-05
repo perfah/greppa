@@ -57,6 +57,22 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
             LOG.error(message);
             throw new RuntimeException(message);
         }
+        // The bundled binary must be executable, and distribution paths
+        // can lose the executable bit on macOS and Linux: GitHub artifact
+        // downloads reset file permissions (the CI workflow uploads the
+        // extracted plugin folder so the artifact download itself is the
+        // installable zip, and the wrapper GitHub creates carries no
+        // permissions), and manual unzipping can lose it too. Without
+        // the bit the launch fails with a permission error. Restoring it
+        // here makes every distribution path work; on Windows this is a
+        // no-op (there is no executable bit, and canExecute() is true
+        // for .exe files).
+        if (!serverFile.canExecute() && !serverFile.setExecutable(true)) {
+            String message = "The bundled Greppa server binary is not executable and the permission cannot be restored: "
+                    + serverFile.getAbsolutePath();
+            LOG.error(message);
+            throw new RuntimeException(message);
+        }
         LOG.info("Using the server binary bundled with the plugin: " + serverFile.getAbsolutePath());
 
         GreppaSettingsState settings = GreppaSettingsState.getInstance();

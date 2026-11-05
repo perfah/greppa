@@ -1,8 +1,9 @@
 # Builds the Rust server binaries for every supported platform and the
-# plugin zips for both IDE targets, and publishes a GitHub Release with
-# the zips - but only for version tags (v1.0.0): a plain push only
-# produces the workflow's build artifacts, so the release list stays
-# signal instead of accumulating one release per commit.
+# plugin for both IDE targets - one job per target - and publishes a
+# GitHub Release with installable zips, but only for version tags
+# (v1.0.0): a plain push only produces the workflow's build artifacts,
+# so the release list stays signal instead of accumulating one release
+# per commit.
 #
 # The server binaries are built on each platform's native runner, so no
 # cross-compilation toolchains are needed: windows-latest is x64,
@@ -13,16 +14,26 @@
 # bundles from lsp_server/bin (see the prepareSandbox block in
 # build.gradle.kts).
 #
-# The plugin zips are uploaded as ONE artifact per IDE target -
-# plugin-rustrover and plugin-intellij - each holding exactly the one
-# zip that installs via Settings | Plugins | Install Plugin from Disk.
-# The previous single plugin-zips artifact bundled both zips into one
-# download, which was neither separable per IDE nor itself installable
-# (the IDE cannot install a zip that contains two zips). Note that
-# GitHub's Actions UI always wraps an artifact download in one zip, so
-# the downloaded file still needs one extraction before the plugin zip
-# inside can be installed; the Release assets of a tag build are the
-# raw installable zips with no wrapper.
+# The plugin jobs upload the EXTRACTED plugin folder, not the built zip:
+# GitHub wraps every artifact download in a zip it creates itself, so an
+# artifact holding the zip file would download as a zip containing the
+# plugin zip - one extraction too many, and not installable as
+# downloaded. With the folder uploaded, GitHub's wrapper IS the plugin
+# zip: the plugin-rustrover and plugin-intellij artifacts download as
+# directly installable plugin zips (Settings | Plugins | Install Plugin
+# from Disk), exactly one per IDE target.
+#
+# One consequence is handled explicitly: artifact uploads do not
+# preserve file permissions, so the bundled macOS/Linux server binaries
+# lose their executable bit in an artifact download. The plugin restores
+# the bit before launching the binary (see
+# GreppaLspServerDescriptor.createCommandLine), and the release job
+# restores it in the zipped release assets.
+#
+# The release zips the downloaded folders into versioned assets
+# (greppa-<version>-rustrover.zip / greppa-<version>-intellij.zip); the
+# version comes from the tag (v1.0.0 -> 1.0.0), so version tags are
+# expected to match the plugin version in plugin.xml.
 name: Build
 
 on:
@@ -65,7 +76,8 @@ jobs:
           name: server-${{ matrix.staged }}
           path: lsp_server/bin/${{ matrix.staged }}
 
-  plugin:
+  plugin-rustrover:
+    name: Plugin (RustRover)
     needs: server
     runs-on: ubuntu-latest
     steps:
@@ -82,61 +94,99 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: gradle/actions/setup-gradle@v4
-      # The unqualified buildPlugin task name runs in every Gradle project
-      # that has it, so one invocation builds both the RustRover zip (the
-      # root project) and the IntelliJ IDEA zip (the idea subproject).
-      # chmod guards against the wrapper's executable bit being lost when
-      # the scripts were committed from Windows.
-      - name: Build plugin zips
+      # The qualified :buildPlugin task name builds only the root
+      # project's zip (the RustRover target); the IntelliJ IDEA zip is
+      # built by the plugin-intellij job. chmod guards against the
+      # wrapper's executable bit being lost when the scripts were
+      # committed from Windows.
+      - name: Build plugin zip
         working-directory: jetbrains_plugin
         run: |
           chmod +x gradlew
-          ./gradlew buildPlugin
-      # Each Gradle project names its zip after its own project name
-      # (greppa-<version>.zip for the root project, idea-<version>.zip
-      # for the idea subproject), but a shipped zip must name the IDE it
-      # was built against. Every zip is therefore copied to
-      # greppa-<version>-<target>.zip, with the version taken from the
-      # built zip's own file name so it cannot drift from the build.
-      - name: Rename zips per target
+          ./gradlew :buildPlugin
+      # The built zip is extracted and its plugin folder is uploaded as
+      # the artifact, so GitHub's download wrapper IS the installable
+      # plugin zip; see the workflow header comment.
+      - name: Extract plugin folder
         shell: bash
         run: |
-          mkdir -p dist
-          for zip in jetbrains_plugin/build/distributions/*.zip; do
-            version=$(basename "$zip" .zip)
-            version=${version##*-}
-            cp "$zip" "dist/greppa-$version-rustrover.zip"
-          done
-          for zip in jetbrains_plugin/idea/build/distributions/*.zip; do
-            version=$(basename "$zip" .zip)
-            version=${version##*-}
-            cp "$zip" "dist/greppa-$version-intellij.zip"
-          done
-      # One artifact per IDE target, each holding its single installable
-      # zip; see the workflow header comment.
+          mkdir dist
+          unzip jetbrains_plugin/build/distributions/*.zip -d dist
       - uses: actions/upload-artifact@v4
         with:
           name: plugin-rustrover
-          path: dist/*-rustrover.zip
+          path: dist
+
+  plugin-intellij:
+    name: Plugin (IntelliJ IDEA)
+    needs: server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # All three platform binaries, merged into the staging directory
+      # the Gradle build bundles from.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: server-*
+          merge-multiple: true
+          path: lsp_server/bin
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      # The qualified :idea:buildPlugin task name builds only the idea
+      # subproject's zip (the IntelliJ IDEA target); the RustRover zip
+      # is built by the plugin-rustrover job.
+      - name: Build plugin zip
+        working-directory: jetbrains_plugin
+        run: |
+          chmod +x gradlew
+          ./gradlew :idea:buildPlugin
+      - name: Extract plugin folder
+        shell: bash
+        run: |
+          mkdir dist
+          unzip jetbrains_plugin/idea/build/distributions/*.zip -d dist
       - uses: actions/upload-artifact@v4
         with:
           name: plugin-intellij
-          path: dist/*-intellij.zip
+          path: dist
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: plugin
+    needs: [plugin-rustrover, plugin-intellij]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # Both per-target artifacts, merged: their zip names differ, so
-      # they land side by side in dist/.
+      # Both plugin artifacts, merged: their plugin folders differ
+      # (greppa/ from the RustRover build, idea/ from the IntelliJ IDEA
+      # build), so they land side by side in dist/.
       - uses: actions/download-artifact@v4
         with:
           pattern: plugin-*
           merge-multiple: true
           path: dist
+      # The plugin jobs upload the extracted plugin folders (so the
+      # artifact download itself is the installable zip); release assets
+      # are named zips, so the folders are zipped here. The version
+      # comes from the tag (v1.0.0 -> 1.0.0): the release only runs for
+      # version tags, which are expected to match the plugin version in
+      # plugin.xml.
+      - name: Zip release assets
+        shell: bash
+        run: |
+          # Artifact downloads do not preserve file permissions, so the
+          # bundled macOS/Linux server binaries lost their executable
+          # bit; restore it before zipping (zip stores the permission,
+          # and the plugin also restores it at launch; see
+          # GreppaLspServerDescriptor.createCommandLine).
+          chmod +x dist/*/bin/lsp_server-*
+          version="${GITHUB_REF_NAME#v}"
+          cd dist
+          zip -r "greppa-$version-rustrover.zip" greppa
+          zip -r "greppa-$version-intellij.zip" idea
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
