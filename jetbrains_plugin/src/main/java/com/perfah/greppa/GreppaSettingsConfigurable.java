@@ -12,7 +12,7 @@ public class GreppaSettingsConfigurable implements Configurable {
 
     @Override
     public @Nls(capitalization = Nls.Capitalization.Title) String getDisplayName() {
-        return "Greppa LSP Server";
+        return "Greppa";
     }
 
     @Override
@@ -24,8 +24,7 @@ public class GreppaSettingsConfigurable implements Configurable {
     @Override
     public boolean isModified() {
         GreppaSettingsState settings = GreppaSettingsState.getInstance();
-        return !settingsComponent.getLspServerPath().equals(settings.lspServerPath)
-                || !settingsComponent.getLlmBaseUrl().equals(settings.llmBaseUrl)
+        return !settingsComponent.getLlmBaseUrl().equals(settings.llmBaseUrl)
                 || !settingsComponent.getLlmModel().equals(settings.llmModel)
                 || !settingsComponent.getLlmApiKey().equals(settings.getLlmApiKey())
                 || !settingsComponent.getGuideline().equals(settings.guideline)
@@ -35,7 +34,6 @@ public class GreppaSettingsConfigurable implements Configurable {
     @Override
     public void apply() {
         GreppaSettingsState settings = GreppaSettingsState.getInstance();
-        settings.lspServerPath = settingsComponent.getLspServerPath();
         settings.llmBaseUrl = settingsComponent.getLlmBaseUrl();
         settings.llmModel = settingsComponent.getLlmModel();
         settings.setLlmApiKey(settingsComponent.getLlmApiKey());
@@ -46,7 +44,6 @@ public class GreppaSettingsConfigurable implements Configurable {
     @Override
     public void reset() {
         GreppaSettingsState settings = GreppaSettingsState.getInstance();
-        settingsComponent.setLspServerPath(settings.lspServerPath);
         settingsComponent.setLlmBaseUrl(settings.llmBaseUrl);
         settingsComponent.setLlmModel(settings.llmModel);
         settingsComponent.setLlmApiKey(settings.getLlmApiKey());

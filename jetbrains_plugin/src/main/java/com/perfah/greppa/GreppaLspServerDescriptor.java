@@ -44,12 +44,22 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
 
     @Override
     public @NotNull GeneralCommandLine createCommandLine() {
+        // The server is always the binary bundled with the plugin's own
+        // distribution - there is no server path setting, so a fresh
+        // install is zero-setup. A custom server build is tested by
+        // staging it in lsp_server/bin and running the plugin from a
+        // Gradle sandbox (see the prepareSandbox block in
+        // build.gradle.kts), not by pointing a setting at it.
+        File serverFile = bundledServerFile();
+        if (serverFile == null) {
+            String message = "No Greppa server available: the plugin installation contains no bundled server binary for this platform. "
+                    + "Reinstall the plugin; on an Intel Mac no binary is bundled (Apple Silicon only).";
+            LOG.error(message);
+            throw new RuntimeException(message);
+        }
+        LOG.info("Using the server binary bundled with the plugin: " + serverFile.getAbsolutePath());
+
         GreppaSettingsState settings = GreppaSettingsState.getInstance();
-        String serverPath = settings.lspServerPath;
-
-        LOG.info("GreppaLspServerDescriptor.createCommandLine called with server path: " + serverPath);
-
-        File serverFile = resolveServerFile(serverPath);
 
         GeneralCommandLine commandLine = new GeneralCommandLine();
         commandLine.setExePath(serverFile.getAbsolutePath());
@@ -101,41 +111,6 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         LOG.info("Setting ANTIVIBER_AUTO_UPDATE_MIN_CHARS to " + settings.autoUpdateMinChars);
         LOG.info("Greppa LSP command line: " + commandLine.getCommandLineString());
         return commandLine;
-    }
-
-    /**
-     * Resolves the server executable to launch: the configured path when
-     * the Server path setting is non-empty, otherwise the binary bundled
-     * with the plugin's own distribution, so a fresh install runs with
-     * no path setup at all. Throws when neither exists - the plugin
-     * cannot run without a server.
-     */
-    private File resolveServerFile(String configuredPath) {
-        if (configuredPath != null && !configuredPath.isBlank()) {
-            File serverFile = new File(configuredPath);
-            if (!serverFile.isAbsolute()) {
-                String basePath = getProject().getBasePath();
-                if (basePath != null) {
-                    serverFile = new File(basePath, configuredPath);
-                    LOG.info("Resolved relative server path against project base path: " + serverFile.getAbsolutePath());
-                }
-            }
-            if (!serverFile.exists()) {
-                String message = "Greppa server binary does not exist: " + serverFile.getAbsolutePath();
-                LOG.error(message);
-                throw new RuntimeException(message);
-            }
-            return serverFile;
-        }
-
-        File bundled = bundledServerFile();
-        if (bundled == null) {
-            String message = "No Greppa server available: the Server path setting is empty and the plugin installation contains no bundled server binary for this platform. Set the server path under Settings | Tools | Greppa.";
-            LOG.error(message);
-            throw new RuntimeException(message);
-        }
-        LOG.info("Using the server binary bundled with the plugin: " + bundled.getAbsolutePath());
-        return bundled;
     }
 
     /**

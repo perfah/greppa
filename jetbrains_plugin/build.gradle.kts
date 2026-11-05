@@ -78,10 +78,10 @@ dependencies {
 // The Rust server binaries bundled into the plugin distribution: the
 // prepareSandbox task copies every file from the staging directory into
 // the plugin's bin/ directory, so a fresh install runs without a
-// separate download - the descriptor launches the binary for the
-// current OS whenever the Server path setting is empty (see
-// GreppaLspServerDescriptor), and a configured path overrides it for
-// custom builds.
+// separate download and with no setup at all - the descriptor always
+// launches the binary for the current OS (see
+// GreppaLspServerDescriptor); there is no server path setting that
+// could override it.
 //
 // The staging directory holds one binary per platform, named by OS and
 // arch (lsp_server-windows-x64.exe, lsp_server-macos-arm64,

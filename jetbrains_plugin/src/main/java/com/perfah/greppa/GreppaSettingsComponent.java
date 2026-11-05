@@ -1,7 +1,5 @@
 package com.perfah.greppa;
 
-import com.intellij.openapi.fileChooser.FileChooserDescriptor;
-import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.util.ui.FormBuilder;
 import org.jetbrains.annotations.NotNull;
@@ -11,7 +9,6 @@ import javax.swing.*;
 public class GreppaSettingsComponent {
 
     private final JPanel panel;
-    private final TextFieldWithBrowseButton lspServerPathField = new TextFieldWithBrowseButton();
     /** Base URL of the LLM service; empty means the server's default. */
     private final JTextField llmBaseUrlField = new JTextField();
     /** Input for the LLM model name; empty means the server's default. */
@@ -30,17 +27,6 @@ public class GreppaSettingsComponent {
             new JSpinner(new SpinnerNumberModel(50, 0, Integer.MAX_VALUE, 1));
 
     public GreppaSettingsComponent() {
-        lspServerPathField.addBrowseFolderListener(
-                "Select Server Binary",
-                "Path to the Greppa server executable",
-                null,
-                new FileChooserDescriptor(true, false, false, false, false, false)
-        );
-        lspServerPathField.setToolTipText(
-                "Path to the Greppa server executable. Leave empty to use the server bundled with the plugin; "
-                        + "set it to launch a custom build instead. "
-                        + "Takes effect the next time the server is started.");
-
         llmBaseUrlField.setToolTipText(
                 "OpenAI-compatible base URL of the LLM service, including the version path, "
                         + "e.g. 'http://localhost:11434/v1' (Ollama), 'https://api.openai.com/v1' (OpenAI) "
@@ -73,7 +59,6 @@ public class GreppaSettingsComponent {
                         + "Takes effect the next time the server is started.");
 
         panel = FormBuilder.createFormBuilder()
-                .addLabeledComponent("Server path:", lspServerPathField, 1, false)
                 .addLabeledComponent("LLM base URL:", llmBaseUrlField, 1, false)
                 .addLabeledComponent("LLM model:", llmModelField, 1, false)
                 .addLabeledComponent("LLM API key:", llmApiKeyField, 1, false)
@@ -85,14 +70,6 @@ public class GreppaSettingsComponent {
 
     public @NotNull JPanel getPanel() {
         return panel;
-    }
-
-    public @NotNull String getLspServerPath() {
-        return lspServerPathField.getText();
-    }
-
-    public void setLspServerPath(@NotNull String path) {
-        lspServerPathField.setText(path);
     }
 
     /** Returns the configured LLM base URL, or an empty string for the default. */
