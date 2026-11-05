@@ -281,8 +281,8 @@ public class HintsPanel extends JPanel {
      */
     private JPanel buildTopicPanel() {
         JPanel panel = new JPanel(new BorderLayout(4, 0));
-        panel.add(new JLabel("Topic/goal:"), BorderLayout.WEST);
-        topicField.getEmptyText().setText("Optional focus, e.g. 'troubleshooting'");
+        panel.add(new JLabel("Focus:"), BorderLayout.WEST);
+        topicField.getEmptyText().setText("Optional topic or goal, e.g. 'thread safety'");
         topicField.setToolTipText(
                 "Optional topic/goal the interpretation is viewed through. Press Enter or click Refresh to set it and re-generate the current file's interpretation; typing alone triggers nothing.");
         topicField.addActionListener(e -> applyTopic());
