@@ -386,14 +386,14 @@ public class HintsPanel extends JPanel {
      *
      * Called by the Refresh button and by pressing Enter in the topic
      * field; typing alone never triggers anything, so the LLM is never
-     * re-run per keystroke. The status label confirms that the topic was
+     * re-run per keystroke. The status label confirms that the focus was
      * stored, because the field itself gives no apply feedback; the next
      * refresh overwrites the label once the re-analysis arrives.
      */
     private void applyTopic() {
         String topic = topicField.getText().trim();
         HintsService.setTopic(topic);
-        statusLabel.setText(topic.isBlank() ? "Topic cleared" : "Topic set: " + topic);
+        statusLabel.setText(topic.isBlank() ? "Focus cleared" : "Focus set: " + topic);
         HintsFilePoller.pollNow();
     }
 
