@@ -28,6 +28,7 @@ public class GreppaSettingsConfigurable implements Configurable {
                 || !settingsComponent.getLlmModel().equals(settings.llmModel)
                 || !settingsComponent.getLlmApiKey().equals(settings.getLlmApiKey())
                 || !settingsComponent.getGuideline().equals(settings.guideline)
+                || !settingsComponent.getDisabledSections().equals(settings.disabledSections)
                 || settingsComponent.getAutoUpdateMinChars() != settings.autoUpdateMinChars;
     }
 
@@ -38,6 +39,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         settings.llmModel = settingsComponent.getLlmModel();
         settings.setLlmApiKey(settingsComponent.getLlmApiKey());
         settings.guideline = settingsComponent.getGuideline();
+        settings.disabledSections = settingsComponent.getDisabledSections();
         settings.autoUpdateMinChars = settingsComponent.getAutoUpdateMinChars();
     }
 
@@ -48,6 +50,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         settingsComponent.setLlmModel(settings.llmModel);
         settingsComponent.setLlmApiKey(settings.getLlmApiKey());
         settingsComponent.setGuideline(settings.guideline);
+        settingsComponent.setDisabledSections(settings.disabledSections);
         // Math.max guards a hand-edited negative value in the XML: the
         // spinner's model rejects values below 0.
         settingsComponent.setAutoUpdateMinChars(Math.max(0, settings.autoUpdateMinChars));

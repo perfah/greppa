@@ -58,6 +58,19 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
     public String guideline = "";
 
     /**
+     * The keys of the analysis document's sections the user disabled in
+     * the settings, comma-separated; empty (the default) means every
+     * section is enabled. The settings' checkboxes produce the keys (see
+     * GreppaSettingsComponent.SECTIONS); passed to the LSP server as the
+     * ANTIVIBER_DISABLED_SECTIONS environment variable when the server
+     * is launched, the Rust prompt builder omits the disabled sections'
+     * instructions so the analysis document contains only the enabled
+     * sections. Unknown keys are ignored. Like the other LLM settings, a
+     * change takes effect the next time the LSP server is started.
+     */
+    public String disabledSections = "";
+
+    /**
      * Minimum number of characters that must have changed since the last
      * completed interpretation before writing triggers a new one; default value
      * 0 disables the automatic refresh while writing entirely (the document

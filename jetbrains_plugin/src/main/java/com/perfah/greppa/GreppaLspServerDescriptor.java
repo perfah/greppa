@@ -114,6 +114,16 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
             commandLine.withEnvironment("ANTIVIBER_LLM_GUIDELINE", settings.guideline);
             LOG.info("Setting ANTIVIBER_LLM_GUIDELINE to " + settings.guideline);
         }
+        // The analysis document's sections the user disabled in the
+        // settings: the Rust prompt builder omits the disabled sections'
+        // instructions, so the document contains only the enabled
+        // sections. An empty value leaves the variable unset, which the
+        // server reads as every section enabled - the default, and the
+        // state of plugin builds without the section settings.
+        if (settings.disabledSections != null && !settings.disabledSections.isBlank()) {
+            commandLine.withEnvironment("ANTIVIBER_DISABLED_SECTIONS", settings.disabledSections);
+            LOG.info("Setting ANTIVIBER_DISABLED_SECTIONS to " + settings.disabledSections);
+        }
         // The auto-refresh threshold for edits: the minimum number of
         // characters that must have changed since the last completed
         // analysis before typing triggers a new one; 0 disables the
