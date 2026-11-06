@@ -1,7 +1,7 @@
 package com.perfah.greppa;
 
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.project.ProjectLocator;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.Nullable;
@@ -19,9 +19,11 @@ import org.jetbrains.annotations.Nullable;
  * relative to the analyzed file's directory - and, when it has no
  * extension, with the common extensions and the index/mod file names
  * appended. A candidate with directories is also tried against the
- * open projects' roots, because some module systems root their
- * imports there. Anything the scan misses can still be attached with
- * the Imports pane's Add file button.
+ * analyzed file's own project's root, because some module systems
+ * root their imports there - never against another open project's
+ * root, so two projects opened side by side never attach each other's
+ * files to an analysis. Anything the scan misses can still be attached
+ * with the Imports pane's Add file button.
  */
 public final class ImportResolver {
 
@@ -62,9 +64,15 @@ public final class ImportResolver {
         }
         // A candidate with directories may also be rooted at a project
         // root (e.g. TypeScript baseUrl imports); a bare file name is too
-        // ambiguous to look up there.
+        // ambiguous to look up there. Only the analyzed file's own project
+        // root is tried, never the other open projects': with two projects
+        // opened side by side, a candidate that exists under both roots
+        // (e.g. "src/lib.rs") would otherwise attach the other project's
+        // file to this file's analysis. A file that belongs to no open
+        // project gets no root lookup at all.
         if (trimmed.contains("/") || trimmed.contains("\\")) {
-            for (Project project : ProjectManager.getInstance().getOpenProjects()) {
+            Project project = ProjectLocator.getInstance().guessProjectForFile(currentFile);
+            if (project != null) {
                 file = resolveRelative(project.getBaseDir(), trimmed);
                 if (file != null) {
                     return file;
