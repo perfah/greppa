@@ -4,10 +4,12 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.util.ui.FormBuilder;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.GridLayout;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 
 public class GreppaSettingsComponent {
 
@@ -49,6 +52,21 @@ public class GreppaSettingsComponent {
                     "The compilation and logical problems found in the file."),
             new Section("recommendations", "Recommendations",
                     "Concrete next steps: the critical ones with code snippets, the automatable ones with AI agent prompts."));
+
+    /**
+     * One tool window tab the settings group the sections by: the tab's
+     * display name and the section filter list its panel is built from
+     * (see HintsToolWindowFactory). The settings' section groups are
+     * derived from these entries, so each section always sits in the
+     * group of the tab that shows it, however the tab lists change.
+     */
+    private record Tab(String title, List<String> sectionNames) {}
+
+    /** The tabs with a section group in the settings, in tab order. */
+    private static final List<Tab> TABS = List.of(
+            new Tab("Interpret", HintsToolWindowFactory.interpretSections()),
+            new Tab("Improve", HintsToolWindowFactory.improveSections()),
+            new Tab("Relate", HintsToolWindowFactory.relateSections()));
 
     private final JPanel panel;
     /** Base URL of the LLM service; empty means the server's default. */
@@ -122,16 +140,16 @@ public class GreppaSettingsComponent {
         JBLabel restartNote = new JBLabel("All changes take effect after the IDE is restarted.");
         restartNote.setForeground(UIUtil.getContextHelpForeground());
 
-        // The section checkboxes in one single-column panel, added to
-        // the form as a single component so the builder chain stays
-        // readable.
+        // The section checkboxes grouped by the tool window tab that
+        // shows each section (see addSectionGroups): the "Sections" header
+        // above one group per tab, with the sections every tab shows in
+        // a leading group above the tab groups.
         JPanel sectionsPanel = new JPanel(new GridLayout(0, 1));
-        for (JBCheckBox checkBox : sectionCheckBoxes.values()) {
-            sectionsPanel.add(checkBox);
-        }
-        JBLabel sectionsHeader = new JBLabel("Analysis sections:");
+        addSectionGroups(sectionsPanel);
+        JBLabel sectionsHeader = new JBLabel("Sections:");
         sectionsHeader.setToolTipText(
-                "The sections of the analysis document generated for each file. Disabled sections are left out of the document.");
+                "The sections of the analysis document generated for each file, grouped by the "
+                        + "tool window tab that shows them. Disabled sections are left out of the document.");
 
         panel = FormBuilder.createFormBuilder()
                 .addLabeledComponent("LLM base URL:", llmBaseUrlField, 1, false)
@@ -144,6 +162,70 @@ public class GreppaSettingsComponent {
                 .addComponent(restartNote)
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
+    }
+
+    /**
+     * Fills the panel with the section checkboxes, grouped by the tool
+     * window tab that shows each section. The groups reuse the tabs'
+     * own filter lists (see TABS) and the same heading match the tabs
+     * filter with (see HintsService.headingMatches), so the grouping
+     * always mirrors the tabs. The sections every tab shows - Scope,
+     * which each tab's list contains - sit in the leading "All tabs"
+     * group above the per-tab groups; each remaining section sits in
+     * the group of the one tab that shows it, and a section no tab's
+     * list catches would sit in the Etc group, like the tab that shows
+     * the leftover sections.
+     */
+    private void addSectionGroups(JPanel sectionsPanel) {
+        List<Section> allTabs = new ArrayList<>();
+        Map<Tab, List<Section>> perTab = new LinkedHashMap<>();
+        for (Tab tab : TABS) {
+            perTab.put(tab, new ArrayList<>());
+        }
+        List<Section> etc = new ArrayList<>();
+        for (Section section : SECTIONS) {
+            List<Tab> showing = new ArrayList<>();
+            for (Tab tab : TABS) {
+                if (HintsService.headingMatches(section.label(), tab.sectionNames())) {
+                    showing.add(tab);
+                }
+            }
+            if (showing.size() > 1) {
+                allTabs.add(section);
+            } else if (showing.size() == 1) {
+                perTab.get(showing.get(0)).add(section);
+            } else {
+                etc.add(section);
+            }
+        }
+        addSectionGroup(sectionsPanel, "All tabs",
+                "Sections shown in every tab of the Greppa tool window.", allTabs);
+        for (Tab tab : TABS) {
+            addSectionGroup(sectionsPanel, tab.title(),
+                    "Sections shown in the " + tab.title() + " tab of the Greppa tool window.",
+                    perTab.get(tab));
+        }
+        addSectionGroup(sectionsPanel, "Etc",
+                "Sections shown in the Etc tab of the Greppa tool window.", etc);
+    }
+
+    /**
+     * Adds one group to the sections panel: a label naming the tab the
+     * group's sections are shown in, followed by the group's checkboxes
+     * indented under the label. Empty groups are skipped.
+     */
+    private void addSectionGroup(JPanel sectionsPanel, String title, String tooltip, List<Section> sections) {
+        if (sections.isEmpty()) {
+            return;
+        }
+        JBLabel label = new JBLabel(title);
+        label.setToolTipText(tooltip);
+        sectionsPanel.add(label);
+        for (Section section : sections) {
+            JBCheckBox checkBox = sectionCheckBoxes.get(section.key());
+            checkBox.setBorder(new EmptyBorder(JBUI.insets(0, 16, 0, 0)));
+            sectionsPanel.add(checkBox);
+        }
     }
 
     public @NotNull JPanel getPanel() {

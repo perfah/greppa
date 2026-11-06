@@ -19,6 +19,39 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
 
     private HintsFilePoller poller;
 
+    /**
+     * The section-name filter of the Interpret tab: every ## section of
+     * the analysis document whose heading contains one of these names
+     * (case-insensitive; see HintsService.filterSections) is shown
+     * there. Public and static so the settings page can derive its
+     * section groups from the tabs' own filter lists (see
+     * GreppaSettingsComponent), keeping the grouping in sync with the
+     * tabs however these lists change.
+     */
+    public static List<String> interpretSections() {
+        return List.of("Scope", "Cursor", "General understanding", "Current functionality", "Explanation", "Parts");
+    }
+
+    /**
+     * The section-name filter of the Improve tab; see interpretSections
+     * for how the names select the sections and why the list is public.
+     */
+    public static List<String> improveSections() {
+        return List.of("Scope", "Suggested direction", "Problems", "Recommendations");
+    }
+
+    /**
+     * The section-name filter of the Relate tab; see interpretSections
+     * for how the names select the sections and why the list is public.
+     * "Relationship", not "Relationships to other files": the analysis
+     * prompt (prompts.rs) asks for the singular "## Relationship to
+     * other files" heading, and the shorter name also matches a plural
+     * heading in case the model drifts; no other section can match it.
+     */
+    public static List<String> relateSections() {
+        return List.of("Scope", "Relationship");
+    }
+
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         // The tabs render the same analysis document, each through its own
@@ -30,23 +63,19 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         // HintsService.filterUnmatchedSections), so the headings the
         // server actually writes are visible when a tab seems to be
         // missing its section.
-        List<String> interpretSections = List.of("Scope", "Cursor", "General understanding", "Current functionality", "Explanation", "Parts");
-        HintsPanel interpretPanel = new HintsPanel(interpretSections);
+        List<String> interpretSectionNames = interpretSections();
+        HintsPanel interpretPanel = new HintsPanel(interpretSectionNames);
         Content interpretContent = ContentFactory.getInstance()
                 .createContent(interpretPanel, "Interpret", false);
 
-        List<String> improveSections = List.of("Scope", "Suggested direction", "Problems", "Recommendations");
-        HintsPanel improvePanel = new HintsPanel(improveSections);
+        List<String> improveSectionNames = improveSections();
+        HintsPanel improvePanel = new HintsPanel(improveSectionNames);
         Content improveContent = ContentFactory.getInstance()
                 .createContent(improvePanel, "Improve", false);
 
         ImportsPanel importsPanel = new ImportsPanel();
-        // "Relationship", not "Relationships to other files": the analysis
-        // prompt (prompts.rs) asks for the singular "## Relationship to
-        // other files" heading, and the shorter name also matches a plural
-        // heading in case the model drifts; no other section can match it.
-        List<String> relateSections = List.of("Scope", "Relationship");
-        HintsPanel relatePanel = new HintsPanel(relateSections);
+        List<String> relateSectionNames = relateSections();
+        HintsPanel relatePanel = new HintsPanel(relateSectionNames);
         Content relateContent = ContentFactory.getInstance()
                 .createContent(buildRelateTab(importsPanel, relatePanel), "Relate", false);
 
@@ -57,9 +86,9 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         // contain (the match is a substring test; see
         // HintsService.headingMatches), the section shows up in Etc
         // instead of the tab it was meant for.
-        List<String> matchedSectionNames = new ArrayList<>(interpretSections);
-        matchedSectionNames.addAll(improveSections);
-        matchedSectionNames.addAll(relateSections);
+        List<String> matchedSectionNames = new ArrayList<>(interpretSectionNames);
+        matchedSectionNames.addAll(improveSectionNames);
+        matchedSectionNames.addAll(relateSectionNames);
         HintsPanel etcPanel = new HintsPanel(matchedSectionNames, true);
         Content etcContent = ContentFactory.getInstance().createContent(etcPanel, "Etc", false);
 

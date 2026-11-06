@@ -557,9 +557,12 @@ public class HintsService {
      * sections. The match is a case-insensitive substring test, so the
      * tab definitions need not repeat the headings verbatim:
      * "Recommendations" also matches a "## Specific recommendations"
-     * heading.
+     * heading. Public so the settings page can group its section
+     * checkboxes under the tab whose filter shows each section (see
+     * GreppaSettingsComponent) using the exact same matching rule as
+     * the tabs.
      */
-    private static boolean headingMatches(@NotNull String heading, @NotNull List<String> sectionNames) {
+    public static boolean headingMatches(@NotNull String heading, @NotNull List<String> sectionNames) {
         String lower = heading.toLowerCase(Locale.ROOT);
         for (String name : sectionNames) {
             if (lower.contains(name.toLowerCase(Locale.ROOT))) {
