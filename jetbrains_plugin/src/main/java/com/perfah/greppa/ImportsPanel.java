@@ -328,6 +328,7 @@ public class ImportsPanel extends JPanel {
             JLabel pathLabel = new JLabel("not found");
             pathLabel.setForeground(JBColor.GRAY);
             row.add(pathLabel, BorderLayout.CENTER);
+            capHeight(row);
             return row;
         }
 
@@ -347,6 +348,7 @@ public class ImportsPanel extends JPanel {
             removeButton.addActionListener(e -> HintsService.removeImport(uri, entry.id()));
             row.add(removeButton, BorderLayout.EAST);
         }
+        capHeight(row);
         return row;
     }
 
@@ -354,7 +356,26 @@ public class ImportsPanel extends JPanel {
         JLabel label = new JLabel(text);
         label.setForeground(JBColor.GRAY);
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        capHeight(label);
         return label;
+    }
+
+    /**
+     * Caps a component's maximum height at its preferred height,
+     * leaving the width unbounded. rowsPanel lays its rows out with a
+     * vertical BoxLayout, which grows components up to their maximum
+     * sizes - and a JPanel's or JLabel's default maximum is unbounded,
+     * so the few rows of a short list were stretched to share the
+     * pane's whole height: three rows ended up evenly spread from top
+     * to bottom, as if the spacing between them grew with the empty
+     * space. Capped, the rows keep their natural height and stack from
+     * the top with fixed spacing, the space below the last row stays
+     * empty, and the scroll pane's scrollbar appears once the rows'
+     * natural heights exceed the visible height.
+     */
+    private static void capHeight(JComponent component) {
+        component.setMaximumSize(
+                new Dimension(Integer.MAX_VALUE, component.getPreferredSize().height));
     }
 
     private static String fileNameOf(String uri) {
