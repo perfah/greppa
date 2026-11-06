@@ -13,8 +13,10 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * The Imports pane of the Greppa Interpretation tool window (the
@@ -42,6 +44,16 @@ import java.util.Objects;
  * skips entries without a resolved file). The Add file button covers
  * attaching the right file manually.
  *
+ * Below the entries, the pane offers the recently opened files as
+ * quick manual adds (see HintsService.getRecentFileUris): one button
+ * per file that is neither the current file nor already attached.
+ * This is how the reverse direction of a relationship gets attached:
+ * the scan only looks at the current file's own references, so when
+ * A imports B and the user is viewing B, A is offered as a quick add
+ * once it has been open, and attaching it lets the analysis describe
+ * how A uses B (the prompt's Relationship section splits into Depends
+ * on and Used by).
+ *
  * The scan behind the list is local and instant (see ImportDetector):
  * the file's text is scanned for quoted path-like strings, mod
  * declarations and use declarations, and every candidate is checked
@@ -61,6 +73,18 @@ public class ImportsPanel extends JPanel {
     private final JBScrollPane scrollPane = new JBScrollPane(rowsPanel);
     private final JLabel statusLabel = new JLabel(" ");
     /**
+     * The quick-add strip below the entry list: one button per recently
+     * opened file (see HintsService.getRecentFileUris) that is neither
+     * the current file nor already attached, so attaching a file the
+     * user just worked with - e.g. the file that imports the current
+     * one, which the scan cannot discover - is one click instead of a
+     * trip through the Add file chooser. Rebuilt on every refresh;
+     * hidden while empty.
+     */
+    private final JPanel recentFilesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    /** How many recently opened files the quick-add strip offers at most. */
+    private static final int MAX_QUICK_ADDS = 5;
+    /**
      * The URI whose imports were last rendered. Initialized to a
      * non-null sentinel so the first refresh always builds the rows
      * (also when no file is open); afterwards refresh() compares
@@ -76,7 +100,13 @@ public class ImportsPanel extends JPanel {
         rowsPanel.setLayout(new BoxLayout(rowsPanel, BoxLayout.Y_AXIS));
         add(buildToolbar(), BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
-        add(statusLabel, BorderLayout.SOUTH);
+        // The quick-add strip sits between the entries and the status
+        // line, outside the scroll pane, so it stays visible however
+        // long the entry list grows.
+        JPanel southPanel = new JPanel(new BorderLayout(0, 4));
+        southPanel.add(recentFilesPanel, BorderLayout.NORTH);
+        southPanel.add(statusLabel, BorderLayout.SOUTH);
+        add(southPanel, BorderLayout.SOUTH);
         refresh();
     }
 
@@ -159,6 +189,7 @@ public class ImportsPanel extends JPanel {
             renderedUri = uri;
             renderedEntries = entries;
             rebuildRows(uri, entries);
+            rebuildRecentFiles(uri, entries);
         });
     }
 
@@ -220,6 +251,63 @@ public class ImportsPanel extends JPanel {
 
         revalidate();
         repaint();
+    }
+
+    /**
+     * Rebuilds the quick-add strip from the recently opened files: one
+     * button per file that is neither the current file nor already
+     * attached (by URI - a file the scan found and a file added manually
+     * are the same attachment), skipping files that no longer resolve.
+     * The strip is hidden while empty, e.g. on a fresh session before
+     * any file switch.
+     */
+    private void rebuildRecentFiles(String uri, List<HintsService.ImportEntry> entries) {
+        recentFilesPanel.removeAll();
+        if (uri != null) {
+            Set<String> attached = new HashSet<>();
+            for (HintsService.ImportEntry entry : entries) {
+                if (entry.uri != null) {
+                    attached.add(entry.uri);
+                }
+            }
+            int shown = 0;
+            for (String recentUri : HintsService.getRecentFileUris()) {
+                if (shown >= MAX_QUICK_ADDS) {
+                    break;
+                }
+                if (recentUri.equals(uri) || attached.contains(recentUri)) {
+                    continue;
+                }
+                VirtualFile file = VirtualFileManager.getInstance().findFileByUrl(recentUri);
+                if (file == null || file.isDirectory()) {
+                    continue;
+                }
+                if (recentFilesPanel.getComponentCount() == 0) {
+                    recentFilesPanel.add(hint("Recently opened:"));
+                }
+                recentFilesPanel.add(buildQuickAddButton(uri, file));
+                shown++;
+            }
+        }
+        recentFilesPanel.setVisible(recentFilesPanel.getComponentCount() > 0);
+        recentFilesPanel.revalidate();
+        recentFilesPanel.repaint();
+    }
+
+    /**
+     * One quick-add button: attaches a recently opened file to the
+     * current file's analysis as a manually added, checked entry (see
+     * HintsService.addManualImport), so it is context from the next
+     * analysis on like every attachment. The entry appears in the list
+     * above with a Remove button, like every manually added file.
+     */
+    private static JButton buildQuickAddButton(String uri, VirtualFile file) {
+        JButton button = new JButton(file.getName());
+        button.setToolTipText(
+                "Attach " + file.getName() + " to the analysis of the current file, as context from the next analysis on.");
+        button.addActionListener(e ->
+                HintsService.addManualImport(uri, file.getUrl(), file.getName(), file.getPath()));
+        return button;
     }
 
     private JPanel buildRow(String uri, HintsService.ImportEntry entry) {

@@ -43,7 +43,7 @@ public class GreppaSettingsComponent {
             new Section("explanation", "Explanation",
                     "The file explained: simplified, technical, at five levels of difficulty, its key concepts, and a flowchart."),
             new Section("relationship", "Relationship to other files",
-                    "How the analyzed file uses each file attached in the Relate tab."),
+                    "How the analyzed file relates to each file attached in the Relate tab, in both directions: what it depends on, and which attached files use it."),
             new Section("parts", "Parts",
                     "The file split into segments, each reviewed in a few sentences."),
             new Section("direction", "Suggested direction",

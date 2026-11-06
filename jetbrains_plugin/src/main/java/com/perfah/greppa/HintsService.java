@@ -67,6 +67,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * analysis); see setImportsForUri and ImportEntry. In-memory only, like
  * the documents themselves.
  *
+ * The service also records the files the user recently had open in the
+ * editor, most recent first (see getRecentFileUris), so the Imports pane
+ * can offer them as quick manual adds - attaching a file the user just
+ * worked with, such as the file that imports the current one, is one
+ * click instead of a trip through the file chooser.
+ *
  * The per-event logs are at debug level, not info: while an analysis
  * streams, the poller forwards updates several times per second, and at
  * info level that flooded idea.log with roughly twenty lines per second
@@ -137,6 +143,21 @@ public class HintsService {
      * attempt, so the message always describes the latest attempt.
      */
     private static volatile String errorMessage = "";
+
+    /**
+     * The URIs of the files the user recently had open in the editor,
+     * most recent first, recorded by the editor selection listener (see
+     * initForProject). The Imports pane offers them as quick manual adds
+     * (see ImportsPanel), so attaching a file the user just worked with -
+     * e.g. the file that imports the current one, which the import scan
+     * cannot discover because it only looks at the current file's own
+     * references - is one click. Bounded so a long session cannot grow
+     * it without limit; in-memory only, like the analysis documents.
+     */
+    private static final List<String> recentFileUris = new ArrayList<>();
+
+    /** How many recently opened files are kept for the quick manual adds. */
+    private static final int MAX_RECENT_FILES = 10;
 
     public static synchronized void updateMarkdownForUri(String uri, String markdown) {
         String normalized = normalizeUri(uri);
@@ -630,10 +651,42 @@ public class HintsService {
                     @Override
                     public void selectionChanged(@NotNull FileEditorManagerEvent event) {
                         LOG.debug("HintsService: editor selection changed, refreshing UI");
+                        // The newly selected file counts as recently opened:
+                        // switching to a file is how files get opened in
+                        // practice, and the quick adds in the Imports pane
+                        // are exactly for files the user just worked with.
+                        recordRecentFile(event.getNewFile());
                         notifyListeners();
                     }
                 }
         );
+    }
+
+    /**
+     * Records a file the user switched to as recently opened, most
+     * recent first. Called on the EDT from the editor selection listener;
+     * a null file (the selection was cleared) records nothing.
+     */
+    private static synchronized void recordRecentFile(VirtualFile file) {
+        if (file == null) {
+            return;
+        }
+        String uri = file.getUrl();
+        recentFileUris.remove(uri);
+        recentFileUris.add(0, uri);
+        if (recentFileUris.size() > MAX_RECENT_FILES) {
+            recentFileUris.remove(recentFileUris.size() - 1);
+        }
+    }
+
+    /**
+     * Returns the URIs of the files the user recently had open in the
+     * editor, most recent first, as a copy. The Imports pane offers the
+     * ones that are neither the current file nor already attached as
+     * quick manual adds (see ImportsPanel).
+     */
+    public static synchronized List<String> getRecentFileUris() {
+        return List.copyOf(recentFileUris);
     }
 
     /**

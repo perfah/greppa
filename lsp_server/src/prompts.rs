@@ -56,7 +56,9 @@ fn section_enabled(key: &str) -> bool {
 ///     entirely when no cursor position is known)
 ///   ## Explanation (Simplified / Technical / With increasing difficulty /
 ///     Relevant concepts / Diagram)
-///   ## Relationship to other files (how each attached file is used)
+///   ## Relationship to other files (Depends on / Used by: what the
+///     analyzed file takes from each attached file, and what each
+///     attached file takes from the analyzed one)
 ///   ## Parts (the file split into line-range segments)
 ///   ## Suggested direction (the next steps on a high conceptual level)
 ///   ## Problems (Compilation and Logical subsections)
@@ -102,15 +104,18 @@ fn section_enabled(key: &str) -> bool {
 /// code. Empty means the IDE reports no errors, and the prompt is
 /// identical to an errors-free analysis.
 ///
-/// When `attachments` is non-empty it holds the files the user checked in
-/// the Imports pane, imported by the analyzed file. They are rendered
-/// after the analyzed code as context only: the prompt forbids
-/// referencing their lines or suggesting changes to them, because the
-/// Line N references and the Replace/Insert/Delete steps drive the
-/// IDE's code actions, which can only edit the analyzed file. The
-/// Relationship to other files section describes how the analyzed file
-/// uses each of them. Empty means no files are attached, and that
-/// section says so.
+/// When `attachments` is non-empty it holds the files the user attached
+/// from the Imports pane: the imports the local scan found, plus files
+/// added manually - including the quick adds from the recently opened
+/// files, which is how a file that imports the analyzed one gets
+/// attached to its analysis. They are rendered after the analyzed code
+/// as context only: the prompt forbids referencing their lines or
+/// suggesting changes to them, because the Line N references and the
+/// Replace/Insert/Delete steps drive the IDE's code actions, which can
+/// only edit the analyzed file. The Relationship to other files section
+/// describes each attachment in both directions: what the analyzed file
+/// takes from it, and what it takes from the analyzed file. Empty means
+/// no files are attached, and that section says so.
 ///
 /// When `cursor_position` is Some, the code is embedded with a <CURSOR>
 /// marker at the caret (see numbered_code_with_cursor) and the document
@@ -287,7 +292,7 @@ problems while these errors exist. \n\n"
             .collect::<Vec<_>>()
             .join("\n\n");
         format!(
-            "\n\nThe user attached the file(s) below from the Imports pane because the analyzed file imports them. \
+            "\n\nThe user attached the file(s) below from the Imports pane because they relate to the analyzed file: the analyzed file may import them, or they may import the analyzed file. \
 They are context for understanding the analyzed file only: every Line N reference and every Replace/Insert/Delete step still targets the analyzed file between BEGIN CODE and END CODE, never an attached file, and no step may change an attached file.\n\n{blocks}"
         )
     };
@@ -349,9 +354,17 @@ visualize.* instead.\n"
         )
     };
 
-    // The Relationship to other files section: how the analyzed file uses
-    // each attached file, plus a diagram of the relationships. Empty when
-    // the user disabled the section. The attachments themselves stay in
+    // The Relationship to other files section: how the analyzed file and
+    // each attached file relate, in both directions. The attachments
+    // carry no direction tag: the model determines the direction of each
+    // relationship from where the references appear - a reference to
+    // the attached file in the analyzed code, or a reference to the
+    // analyzed file in the attached file's content - and sorts every
+    // attachment into the Depends on and Used by subsections
+    // accordingly. That is what makes the manual quick adds work: a
+    // file that imports the analyzed one, attached from the Imports
+    // pane, lands under Used by without any extra plumbing. Empty when
+    // the user disabled the section; the attachments themselves stay in
     // the prompt as context either way: they inform every section, not
     // only this one.
     let relationship_section = if !relationship_enabled {
@@ -359,13 +372,26 @@ visualize.* instead.\n"
     } else {
         format!(
             "## Relationship to other files\n\
-The user attached the file(s) listed after the code from the Imports pane, because the analyzed file imports them. \
-For EVERY attached file, write one bullet that starts with the file's name and describes how the analyzed file uses it: what it imports from that file, which functions, types or values it takes from it, and the role that file plays for the analyzed file, like: - prompts.rs: Provides the prompt builders that the file calls. \
-If no files are attached, write *No attached files.*\n\n\
+The user attached the file(s) listed after the code from the Imports pane because they relate to the analyzed file. \
+If no files are attached, write *No attached files.*\n\
+Otherwise, for EVERY attached file, determine the direction of the relationship from where the references are: \
+a reference to the attached file in the analyzed code means the analyzed file depends on it, \
+and a reference to the analyzed file in the attached file's content means the analyzed file is used by it. \
+A file may relate in both directions; every attached file must appear in at least one of the two lists below, \
+each introduced by a ### subheading with exactly this text:\n\n\
+### Depends on\n\
+One bullet per attached file the analyzed file depends on, each starting with the file's name and describing what the analyzed file takes from it: \
+which functions, types or values it uses, and the role that file plays for the analyzed file, like: - prompts.rs: Provides the prompt builders that the file calls. \
+Write *None.* when no attached file belongs here.\n\n\
+### Used by\n\
+One bullet per attached file that uses the analyzed file, each starting with the file's name and describing what that file takes from the analyzed one: \
+which functions, types or values it uses, and the role the analyzed file plays for it, like: - main.rs: Calls this file's prompt builders to generate its analysis prompts. \
+Write *None.* when no attached file belongs here.\n\n\
 ### Diagram\n\n\
 Create a compact flowchart in ASCII art showing how the analyzed file relates to the attached files: \
-the analyzed file as one node, every attached file as its own node, and labeled arrows between them for what flows where: \
-what the analyzed file imports from each file, and which functions, types or values it takes from it. \
+the analyzed file as one node, every attached file as its own node, and labeled arrows for what flows where: \
+an arrow from an attached file to the analyzed file for what the analyzed file takes from it, \
+and an arrow from the analyzed file to an attached file for what that file takes from the analyzed one. \
 Make it pedagogic / explanatory for a person who is new to what the file is about. \
 Wrap it in a fenced code block: a line with {fence}, the diagram, then a closing line with {fence}. \
 If no files are attached, write *No flowchart: nothing to visualize.* instead.\n"
