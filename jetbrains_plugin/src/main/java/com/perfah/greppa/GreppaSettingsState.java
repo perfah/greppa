@@ -62,8 +62,8 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * the settings, comma-separated; empty (the default) means every
      * section is enabled. The settings' checkboxes produce the keys (see
      * GreppaSettingsComponent.SECTIONS); passed to the LSP server as the
-     * ANTIVIBER_DISABLED_SECTIONS environment variable when the server
-     * is launched, the Rust prompt builder omits the disabled sections'
+     * ANTIVIBER_DISABLED_SECTIONS environment variable when the server is
+     * launched, the Rust prompt builder omits the disabled sections'
      * instructions so the analysis document contains only the enabled
      * sections. Unknown keys are ignored. Like the other LLM settings, a
      * change takes effect the next time the LSP server is started.
@@ -78,6 +78,19 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * Refresh button re-analyze).
      */
     public int autoUpdateMinChars = 0;
+
+    /**
+     * Whether saving a document refreshes its interpretation: the save
+     * listeners write the tick trigger file (see GreppaProjectActivity),
+     * so the LSP server re-analyzes the saved file - also when the file
+     * content is unchanged, e.g. after only the caret moved. Unlike the
+     * other settings this one is IDE-side: it is read when the save
+     * happens, not passed to the LSP server as an environment variable,
+     * so toggling it applies immediately without an IDE restart. Default
+     * on: the save-triggered refresh is the plugin's established
+     * behavior.
+     */
+    public boolean refreshOnSave = true;
 
     /**
      * Service name under which the API key is stored in the IDE's

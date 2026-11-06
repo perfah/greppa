@@ -85,6 +85,12 @@ public class GreppaSettingsComponent {
      */
     private final JSpinner autoUpdateMinCharsField =
             new JSpinner(new SpinnerNumberModel(50, 0, Integer.MAX_VALUE, 1));
+    /**
+     * Toggles the save-triggered refresh (see
+     * GreppaSettingsState.refreshOnSave). A checkbox with its own label
+     * rather than a labeled form row, because it is a single boolean.
+     */
+    private final JBCheckBox refreshOnSaveField = new JBCheckBox("Refresh interpretation on save");
     /** The section checkboxes by section key, built from SECTIONS in document order. */
     private final Map<String, JBCheckBox> sectionCheckBoxes = new LinkedHashMap<>();
 
@@ -118,26 +124,35 @@ public class GreppaSettingsComponent {
                         + "opening a file, switching tabs and the Refresh button still re-analyze. "
                         + "Default: 0 (automatic refresh off).");
 
+        refreshOnSaveField.setToolTipText(
+                "When on, saving a file (Ctrl+S, Save All and the IDE's autosaves alike) re-generates its interpretation. "
+                        + "The refresh also runs when the file content is unchanged - e.g. after moving only the cursor - "
+                        + "so the analysis reflects the current caret. Takes effect immediately; no restart needed.");
+
         for (Section section : SECTIONS) {
             JBCheckBox checkBox = new JBCheckBox(section.label());
             checkBox.setToolTipText(section.tooltip());
             sectionCheckBoxes.put(section.key(), checkBox);
         }
 
-        // The single restart note for the whole page. Every setting is
-        // passed to the server as an environment variable when the server
-        // is launched (see GreppaLspServerDescriptor.createCommandLine),
-        // and a running process's environment never changes, so no
-        // setting can take effect while the current server keeps running.
-        // One note at the bottom instead of a sentence in every tooltip,
-        // and it names the actionable instruction (restart the IDE)
-        // rather than the mechanism ("the next time the server is
-        // started"). Rendered in the context-help color so it reads as a
-        // note, not as another form label. The color is set through
-        // setForeground, not JBLabel.setFontColor: in this IDE build
-        // setFontColor takes the new UI's FontColor type, not a
-        // java.awt.Color.
-        JBLabel restartNote = new JBLabel("All changes take effect after the IDE is restarted.");
+        // The restart note for the server settings. Every setting except
+        // the save-refresh toggle is passed to the server as an
+        // environment variable when the server is launched (see
+        // GreppaLspServerDescriptor.createCommandLine), and a running
+        // process's environment never changes, so those settings cannot
+        // take effect while the current server keeps running. One note at
+        // the bottom instead of a sentence in every tooltip, and it names
+        // the actionable instruction (restart the IDE) rather than the
+        // mechanism ("the next time the server is started"). The
+        // save-refresh toggle is the exception named in the note: the
+        // IDE's save listeners read it when the save events fire (see
+        // GreppaProjectActivity), so it applies immediately. Rendered in
+        // the context-help color so it reads as a note, not as another
+        // form label. The color is set through setForeground, not
+        // JBLabel.setFontColor: in this IDE build setFontColor takes the
+        // new UI's FontColor type, not a java.awt.Color.
+        JBLabel restartNote = new JBLabel(
+                "The server settings take effect after the IDE is restarted; the save-refresh toggle applies immediately.");
         restartNote.setForeground(UIUtil.getContextHelpForeground());
 
         // The section checkboxes grouped by the tool window tab that
@@ -157,6 +172,7 @@ public class GreppaSettingsComponent {
                 .addLabeledComponent("LLM API key:", llmApiKeyField, 1, false)
                 .addLabeledComponent("LLM guideline:", new JBScrollPane(guidelineField), 1, false)
                 .addLabeledComponent("Min. chars changed for auto-refresh:", autoUpdateMinCharsField, 1, false)
+                .addComponent(refreshOnSaveField)
                 .addComponent(sectionsHeader)
                 .addComponent(sectionsPanel)
                 .addComponent(restartNote)
@@ -318,5 +334,15 @@ public class GreppaSettingsComponent {
     /** Sets the shown minimum number of changed chars for the auto-refresh. */
     public void setAutoUpdateMinChars(int minChars) {
         autoUpdateMinCharsField.setValue(minChars);
+    }
+
+    /** Returns whether the save-triggered refresh is on; see GreppaSettingsState.refreshOnSave. */
+    public boolean isRefreshOnSave() {
+        return refreshOnSaveField.isSelected();
+    }
+
+    /** Sets the shown save-refresh toggle. */
+    public void setRefreshOnSave(boolean refreshOnSave) {
+        refreshOnSaveField.setSelected(refreshOnSave);
     }
 }
