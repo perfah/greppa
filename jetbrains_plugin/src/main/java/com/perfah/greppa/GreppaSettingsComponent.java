@@ -51,7 +51,7 @@ public class GreppaSettingsComponent {
             new Section("problems", "Problems",
                     "The compilation and logical problems found in the file."),
             new Section("recommendations", "Recommendations",
-                    "Concrete next steps: the critical ones with code snippets, the automatable ones with AI agent prompts."));
+                    "Concrete next steps: the critical ones with code snippets, the automatable ones with AI agent prompts, and the trivial ones to copy-paste yourself."));
 
     /**
      * One tool window tab the settings group the sections by: the tab's

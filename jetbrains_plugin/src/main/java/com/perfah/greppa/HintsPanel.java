@@ -35,8 +35,21 @@ public class HintsPanel extends JPanel {
     /** Color for the "Critical for understanding" heading (light theme, dark theme). */
     private static final Color CRITICAL_COLOR =
             new JBColor(new Color(0xC6, 0x28, 0x28), new Color(0xFF, 0x74, 0x74));
-    /** Color for the "Automatable" heading (light theme, dark theme). */
+    /**
+     * Color for the "Automatable" heading (light theme, dark theme):
+     * yellow, for the group of larger chores and repetitive tasks that
+     * are handed to an AI agent. The light-theme shade is dark enough to
+     * stay readable on a white background; the dark-theme shade is a
+     * bright pastel like the other heading colors.
+     */
     private static final Color AUTOMATABLE_COLOR =
+            new JBColor(new Color(0xB5, 0x89, 0x00), new Color(0xFF, 0xD5, 0x4F));
+    /**
+     * Color for the "Trivial" heading (light theme, dark theme): green,
+     * for the group of small copy-paste edits the user can easily make
+     * themselves.
+     */
+    private static final Color TRIVIAL_COLOR =
             new JBColor(new Color(0x2E, 0x7D, 0x32), new Color(0x69, 0xDB, 0x7C));
 
     /**
@@ -572,7 +585,8 @@ public class HintsPanel extends JPanel {
                 cardLayout.show(contentPanel, "PLACEHOLDER");
             } else {
                 List<String> renderedCodeBlocks = new ArrayList<>();
-                String html = MarkdownParser.toHtml(markdown, CRITICAL_COLOR, AUTOMATABLE_COLOR, renderedCodeBlocks);
+                String html = MarkdownParser.toHtml(
+                        markdown, CRITICAL_COLOR, AUTOMATABLE_COLOR, TRIVIAL_COLOR, renderedCodeBlocks);
                 codeBlocks = renderedCodeBlocks;
                 textPane.setText(linkifyLineReferences(html));
                 textPane.setCaretPosition(0);
@@ -779,10 +793,10 @@ public class HintsPanel extends JPanel {
      *   underline. The nbsp entities MarkdownParser pads the label with
      *   provide the horizontal breathing room, because Swing's CSS has no
      *   padding support for inline elements.
-     * - The "Critical for understanding" and "Automatable" category
-     *   headings of the Suggested actions section are not styled here:
-     *   they are colored by MarkdownParser with font tags, which Swing's
-     *   HTML renderer supports more reliably than CSS classes.
+     * - The "Critical for understanding", "Automatable" and "Trivial"
+     *   category headings of the Recommendations section are not styled
+     *   here: they are colored by MarkdownParser with font tags, which
+     *   Swing's HTML renderer supports more reliably than CSS classes.
      * Margins are generous because the tool window scrolls, so extra
      * spacing costs nothing.
      */

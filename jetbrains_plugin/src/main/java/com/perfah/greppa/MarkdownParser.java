@@ -22,10 +22,10 @@ import java.util.regex.Pattern;
  * express them:
  * - the "(file-level)" and "(segment-level)" suffixes of the section
  *   headings are stripped (see stripLevelSuffixes),
- * - the two "Suggested actions" category headings, "Critical for
- *   understanding" and "Automatable", are wrapped in colored font tags
- *   (see colorizeCategories), using the colors passed in by HintsPanel so
- *   they follow the IDE theme, and
+ * - the three "Recommendations" category headings, "Critical for
+ *   understanding", "Automatable" and "Trivial", are wrapped in colored
+ *   font tags (see colorizeCategories), using the colors passed in by
+ *   HintsPanel so they follow the IDE theme, and
  * - code blocks are rewritten from pre elements into ordinary block
  *   content (see wrapCodeBlocks), because Swing's HTML renderer never
  *   wraps preformatted content, which made code lines wider than the tool
@@ -89,17 +89,17 @@ public final class MarkdownParser {
     /**
      * Converts a Markdown document to a full HTML document for a JTextPane.
      * The GFM flavour is used so tables and strikethrough render correctly
-     * in addition to the common Markdown subset. The two colors are used
-     * for the "Critical for understanding" and "Automatable" category
-     * headings of the Suggested actions section and are passed in by the
-     * caller (HintsPanel) so they follow the IDE theme.
+     * in addition to the common Markdown subset. The three colors are used
+     * for the "Critical for understanding", "Automatable" and "Trivial"
+     * category headings of the Recommendations section and are passed in by
+     * the caller (HintsPanel) so they follow the IDE theme.
      *
      * The plain-text content of every code block, in document order, is
      * added to codeBlockSink. The "Copy" link embedded above each code
      * block references its entry by index, so the caller can serve the
      * link clicks; see COPY_LINK_PREFIX.
      */
-    public static String toHtml(String markdown, Color criticalColor, Color automatableColor, List<String> codeBlockSink) {
+    public static String toHtml(String markdown, Color criticalColor, Color automatableColor, Color trivialColor, List<String> codeBlockSink) {
         String source = stripLevelSuffixes(markdown == null ? "" : markdown);
         GFMFlavourDescriptor flavour = new GFMFlavourDescriptor();
         ASTNode tree = new org.intellij.markdown.parser.MarkdownParser(flavour)
@@ -107,7 +107,7 @@ public final class MarkdownParser {
         String body = new HtmlGenerator(source, tree, flavour, false)
                 .generateHtml(new SimpleTagRenderer());
         return "<html><body>"
-                + colorizeCategories(wrapCodeBlocks(body, codeBlockSink), criticalColor, automatableColor)
+                + colorizeCategories(wrapCodeBlocks(body, codeBlockSink), criticalColor, automatableColor, trivialColor)
                 + "</body></html>";
     }
 
@@ -140,10 +140,11 @@ public final class MarkdownParser {
     }
 
     /**
-     * Wraps the two "Suggested actions" category headings in colored font
+     * Wraps the three "Recommendations" category headings in colored font
      * tags: "Critical for understanding" in the critical color (red),
-     * "Automatable" in the automatable color (green). Markdown has no
-     * color syntax, so this is done on the generated HTML.
+     * "Automatable" in the automatable color (yellow), "Trivial" in the
+     * trivial color (green). Markdown has no color syntax, so this is done
+     * on the generated HTML.
      *
      * The colors are emitted as font color attributes - the HTML 3.2 form
      * that Swing's built-in HTML renderer fully supports - instead of CSS
@@ -157,12 +158,14 @@ public final class MarkdownParser {
      * snippets. If the model deviates from the mandated heading text, the
      * heading simply renders uncolored.
      */
-    private static String colorizeCategories(String html, Color critical, Color automatable) {
+    private static String colorizeCategories(String html, Color critical, Color automatable, Color trivial) {
         return html
                 .replace(">Critical for understanding<",
                         ">" + categoryHtml("Critical for understanding", critical) + "<")
                 .replace(">Automatable<",
-                        ">" + categoryHtml("Automatable", automatable) + "<");
+                        ">" + categoryHtml("Automatable", automatable) + "<")
+                .replace(">Trivial<",
+                        ">" + categoryHtml("Trivial", trivial) + "<");
     }
 
     private static String categoryHtml(String label, Color color) {

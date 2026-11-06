@@ -492,9 +492,10 @@ For example: If they write 'I want to implement a peer-to-peer network using rus
     };
 
     // The Recommendations section: the concrete next steps, split into the
-    // critical ones (with code snippets) and the automatable ones (with
-    // AI agent prompts). What the steps must achieve and what they must
-    // cover is built from which of the section's two drivers are
+    // critical ones (with code snippets), the automatable ones (with AI
+    // agent prompts) and the trivial ones (with copy-paste snippets the
+    // user applies themselves). What the steps must achieve and what they
+    // must cover is built from which of the section's two drivers are
     // enabled: the steps cover the Problems section and the Suggested
     // direction only while those sections are part of the document, and
     // referencing a disabled section would ask the model to cover
@@ -530,11 +531,11 @@ Before writing the steps, count the problems you listed in the Problems section,
 {goal} {coverage} \
 Here it's important to be elaborate: give each step real detail and reasoning.\n\
 This is the most important part of the review and must guide the user on what to do next. \
-Every step in both groups below must start with the exact line number where the change happens: the line at which the step's code is inserted, or the FIRST line of the existing code that the step's code replaces. \
+Every step in all three groups below must start with the exact line number where the change happens: the line at which the step's code is inserted, or the FIRST line of the existing code that the step's code replaces. \
 Use the 1-based line numbers shown at the start of each code line below, like: 1. Line 13: Refactor the loop to cache the list. \
 Never use a line range in this section, never invent a line number (copy it from the prefixes of the code below), and never point at a line inside a suggested code snippet - the reference always points into the analyzed file. \
 A step that affects the whole file uses Line 1. \
-Split the steps into exactly two groups, in this order, each introduced by a ### subheading with exactly this text:\n\n\
+Split the steps into exactly three groups, in this order, each introduced by a ### subheading with exactly this text:\n\n\
 ### Critical for understanding\n\
 Contains the steps that are essential for understanding the overall program - the design decisions and core logic a human should work through personally. \
 Number the steps. For EVERY step, first write a detailed description of how the implementation might look: the approach, the important data structures, the control flow, and why it works. \
@@ -547,12 +548,17 @@ Write the snippet in the language of the analyzed file. \
 Every snippet must be a complete, working implementation: NEVER a placeholder, stub or skeleton, and never a comment like 'placeholder', 'TODO' or 'implement logic here' standing in for real code. \
 Steps in this group must NEVER include an AI agent prompt.\n\n\
 ### Automatable\n\
-Contains the steps that are trivial labor and do not require understanding the overall program, so the user can hand them to an AI agent directly. \
+Contains the steps that are larger chores and repetitive tasks - work that is not central for understanding the overall program but is too big or too tedious to do by hand, so the user can hand them to an AI agent directly. \
 Number the steps, one short sentence per step. \
 For EVERY step, add a fenced code block whose first line is 'AI agent prompt:' followed by a self-contained prompt that the user can copy-paste to an AI agent to execute the step without any other context. \
 The AI agent prompt is the only code block allowed in this group; do not add normal code snippets here.\n\n\
+### Trivial\n\
+Contains the small mechanical changes the user can easily make themselves - copy-paste edits like adding a missing import, renaming an identifier or fixing a one-liner. \
+Number the steps, one short sentence per step. \
+For EVERY step, add the exact code to paste as a fenced code block - a line with {fence} (optionally followed by the language name), the code, then a closing line with {fence}. \
+The snippet is the only code block allowed in this group; do not add AI agent prompts here.\n\n\
 If a group has no steps, write *None.* under its subheading and add one sentence explaining that this can happen while the code does not yet have a clear direction.\n\
-If there is nothing to suggest, write *No suggestions.* and omit both ### subheadings.\n"
+If there is nothing to suggest, write *No suggestions.* and omit all three ### subheadings.\n"
         )
     };
 
