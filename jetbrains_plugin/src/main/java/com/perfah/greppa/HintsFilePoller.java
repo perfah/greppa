@@ -51,10 +51,10 @@ import java.util.stream.Collectors;
  * forwards the message to HintsService so the tool window shows it in its
  * status line; see readErrorFile.
  *
- * The manual reload action calls pollNow(), which additionally asks the
- * server to re-analyze the currently selected file by writing a trigger
- * file (see writeTriggerFile): re-reading the disk files alone would only
- * show the previous analysis, because the server skips ticks for
+ * The Analyze button calls pollNow(), which additionally asks the server to
+ * generate a new analysis of the currently selected file by writing a
+ * trigger file (see writeTriggerFile): re-reading the disk files alone would
+ * only show the previous analysis, because the server skips ticks for
  * unchanged files.
  */
 public class HintsFilePoller implements Runnable {
@@ -112,11 +112,14 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Entry point of the manual reload action: re-reads the analysis files
-     * already on disk (immediate feedback, and the only option when no LSP
-     * server is running) and asks the server to run a fresh analysis of
-     * the currently selected file. The new analysis file is picked up by
-     * the regular polling loop shortly after the server writes it.
+     * Entry point of the Analyze button: re-reads the analysis files
+     * already on disk (picking up anything the poll loop has not
+     * forwarded yet, and the only option when no LSP server is running)
+     * and asks the server to generate a new analysis of the currently
+     * selected file. The new analysis is picked up by the regular
+     * polling loop shortly after the server writes it, and its finished
+     * document becomes the file's newest history entry (see
+     * HintsService.completeMarkdownForUri).
      */
     public static void pollNow() {
         HintsFilePoller poller = instance;
@@ -147,8 +150,8 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Re-reads all analysis files even if they have not changed. Used by the
-     * manual reload action.
+     * Re-reads all analysis files even if they have not changed. Used by
+     * the Analyze button (via pollNow).
      */
     private synchronized void forcePoll() {
         processedTimestamps.clear();
@@ -276,10 +279,10 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Asks the Rust LSP server to re-analyze the currently selected file by
-     * writing a trigger file. The server polls for the file and runs a
-     * forced tick (bypassing its duplicate check), so clicking reload or
-     * Apply always produces a fresh analysis.
+     * Asks the Rust LSP server to generate a new analysis of the currently
+     * selected file by writing a trigger file. The server polls for the
+     * file and runs a forced tick (bypassing its duplicate check), so the
+     * Analyze button always produces a new analysis.
      *
      * The current file and its caret position are resolved on the EDT
      * (FileEditorManager access).
@@ -299,7 +302,7 @@ public class HintsFilePoller implements Runnable {
     /**
      * Writes a trigger file that the Rust LSP server picks up to run a tick
      * for the given file. This is the primary trigger mechanism for tab
-     * switches and the reload/Apply button: the custom LSP notifications
+     * switches and the Analyze button: the custom LSP notifications
      * (custom/didSwitchFile, custom/forceTick) cannot be sent because the
      * IDE's running-server registry is never populated (the platform does
      * not call LspServerDescriptor.createLspServerListener in this build),

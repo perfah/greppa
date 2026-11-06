@@ -19,14 +19,16 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Set;
 
 /**
- * Refreshes the analysis when the user saves, while the save-refresh
+ * Generates a new analysis when the user saves, while the save-refresh
  * setting is on (see GreppaSettingsState.refreshOnSave; the setting is
  * read when the events fire, so toggling it applies immediately).
  *
- * Two paths write the same tick trigger file the reload button uses
+ * Two paths write the same tick trigger file the Analyze button uses
  * (HintsFilePoller.writeTriggerFile with force = true), so the Rust
  * LSP server picks it up within 250 ms, cancels the analysis
- * currently streaming and runs a forced tick:
+ * currently streaming and runs a forced tick; the finished analysis
+ * is added to the file's history like every other (see
+ * HintsService.completeMarkdownForUri):
  *
  * - FileDocumentManagerListener.beforeDocumentSaving fires for every
  *   document that actually gets saved (Ctrl+S, Save All and the IDE's
@@ -36,14 +38,14 @@ import java.util.Set;
  * - An ActionListener on the platform's save actions covers the case the
  *   save listener cannot see: the platform fires beforeDocumentSaving
  *   only for documents with unsaved changes, so pressing Ctrl+S on an
- *   unchanged document produced no event at all and no refresh - even
- *   though the caret may have moved, which is meaningful input for the
- *   analysis (the Cursor section and the Parts section's current-segment
- *   marker are computed from it). When a save action runs and the
- *   current file's document has no unsaved changes, the trigger is
- *   written for the current file with its caret; a save of changed
- *   content is left to the save listener, so one Ctrl+S still produces
- *   one trigger.
+ *   unchanged document produced no event at all and no new analysis -
+ *   even though the caret may have moved, which is meaningful input for
+ *   the analysis (the Cursor section and the Parts section's
+ *   current-segment marker are computed from it). When a save action
+ *   runs and the current file's document has no unsaved changes, the
+ *   trigger is written for the current file with its caret; a save of
+ *   changed content is left to the save listener, so one Ctrl+S still
+ *   produces one trigger.
  *
  * The trigger file is used because the custom LSP notifications cannot be
  * sent (the IDE's running-server registry is never populated in this
@@ -118,7 +120,7 @@ public final class GreppaProjectActivity implements ProjectActivity {
                         if (!SAVE_ACTION_IDS.contains(event.getActionId())) {
                             return;
                         }
-                        refreshUnchangedCurrentFile();
+                        analyzeUnchangedCurrentFile();
                     }
                 }
         );
@@ -126,15 +128,15 @@ public final class GreppaProjectActivity implements ProjectActivity {
     }
 
     /**
-     * Writes the refresh trigger for the currently selected file when a
+     * Writes the analysis trigger for the currently selected file when a
      * save action runs but the save listener will not fire for it: the
      * platform only fires beforeDocumentSaving for documents with
      * unsaved changes, so an unchanged file - e.g. after only the caret
-     * moved - would otherwise see no refresh on Ctrl+S. The caret is
-     * part of the trigger, so the re-analysis describes the position
+     * moved - would otherwise see no new analysis on Ctrl+S. The caret is
+     * part of the trigger, so the new analysis describes the position
      * the user is actually at.
      */
-    private static void refreshUnchangedCurrentFile() {
+    private static void analyzeUnchangedCurrentFile() {
         String currentUri = HintsService.getCurrentFileUri();
         if (currentUri == null) {
             return;

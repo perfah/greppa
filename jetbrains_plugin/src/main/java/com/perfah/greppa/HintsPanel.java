@@ -62,9 +62,9 @@ public class HintsPanel extends JPanel {
     private static final String LINE_LINK_PREFIX = "greppa://lines/";
 
     /**
-     * Formats a previous interpretation's completion time for its history
-     * combo label, like "2026-11-05 23:57": the date and minute the
-     * interpretation was completed, in the local time zone.
+     * Formats an analysis's completion time for its history combo label,
+     * like "2026-11-05 23:57": the date and minute the analysis was
+     * completed, in the local time zone.
      */
     private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
@@ -88,35 +88,34 @@ public class HintsPanel extends JPanel {
      */
     private final JToggleButton pauseButton = new JToggleButton("Pause");
     /**
-     * Re-generates the current file's interpretation, applying the focus
-     * field (see applyTopic). Disabled while analyses are paused - the
-     * server skips every tick while paused, so the click could do
+     * Generates a new analysis of the current file, applying the focus
+     * field (see applyTopic); the finished analysis is added to the
+     * history as its newest entry. Disabled while analyses are paused -
+     * the server skips every tick while paused, so the click could do
      * nothing - and re-enabled on resume; see syncPauseButton and
      * setPaused.
      */
-    private final JButton refreshButton = new JButton("Refresh");
+    private final JButton analyzeButton = new JButton("Analyze");
 
     /**
-     * Lists the current interpretation and the previous complete
-     * interpretations of the selected file, newest first ("Current",
-     * then one entry per previous interpretation, labeled with when it
-     * was completed and the focus it was viewed through; see
-     * historyEntryLabel). Selecting a previous version only displays it;
-     * the Restore button makes the selection current again. See
-     * buildHistoryPanel and HintsService.getHistoryForUri.
+     * Lists the analyses of the selected file, newest first, each
+     * labeled with when it was completed and the focus it was viewed
+     * through (see historyEntryLabel). The newest entry is selected by
+     * default and shows the live document - the newest analysis, merged
+     * with the partial one while the next analysis streams in; selecting
+     * a previous entry shows that analysis as it was completed and
+     * fills the topic field with its focus. The selection survives
+     * refreshes as long as the list does not change; when a new
+     * analysis completes, the entry indices shift, so the combo is
+     * rebuilt and the selection resets to the newest entry (see
+     * refresh).
      */
-    private final JComboBox<String> historyCombo = new JComboBox<>(new String[]{"Current"});
+    private final JComboBox<String> historyCombo = new JComboBox<>();
     /**
-     * Makes the version selected in the history combo the current
-     * interpretation again (HintsService.restoreFromHistory), e.g. after
-     * a bad regeneration. Enabled only while a previous version is
-     * selected.
-     */
-    private final JButton restoreButton = new JButton("Restore");
-    /**
-     * True while refresh() rebuilds the history combo model, so the
-     * combo's own action listener ignores the programmatic selection
-     * change instead of triggering another refresh.
+     * True while refresh() or applyTopic() changes the combo's model or
+     * selection programmatically, so the combo's own action listener
+     * ignores the programmatic change instead of triggering another
+     * refresh.
      */
     private boolean updatingHistoryCombo = false;
     /**
@@ -126,11 +125,10 @@ public class HintsPanel extends JPanel {
      */
     private String renderedHistoryUri = null;
     /**
-     * The history list the combo was last built from. refresh() compares
-     * against it to detect that a new analysis completed, an entry was
-     * restored, or the analysis was cleared - all of which shift the
-     * entry indices, so the combo is rebuilt and the selection reset to
-     * "Current".
+     * The analyses the combo was last built from. refresh() compares
+     * against it to detect that a new analysis completed or the analyses
+     * were cleared - both shift the entry indices, so the combo is
+     * rebuilt and the selection resets to the newest entry.
      */
     private List<HintsService.HistoryEntry> renderedHistory = List.of();
 
@@ -232,8 +230,7 @@ public class HintsPanel extends JPanel {
         contentPanel.add(scrollPane, "LIST");
         contentPanel.add(buildPlaceholder(), "PLACEHOLDER");
         // The north area holds two strips: the topic/goal input and, below
-        // it, the history selector for previous interpretations of the
-        // selected file.
+        // it, the history selector for the analyses of the selected file.
         JPanel northPanel = new JPanel(new BorderLayout(0, 4));
         northPanel.add(buildTopicPanel(), BorderLayout.NORTH);
         northPanel.add(buildHistoryPanel(), BorderLayout.SOUTH);
@@ -304,14 +301,15 @@ public class HintsPanel extends JPanel {
      * this topic when one is set.
      *
      * The topic is applied only explicitly: pressing Enter or clicking the
-     * Refresh button stores it and asks the server to re-analyze the
-     * current file. Typing alone triggers nothing - re-analyzing on every
-     * keystroke would restart the LLM analysis for each character typed,
-     * which is exactly what the explicit apply avoids.
+     * Analyze button stores it and asks the server to generate a new
+     * analysis of the current file. Typing alone triggers nothing -
+     * re-analyzing on every keystroke would restart the LLM analysis for
+     * each character typed, which is exactly what the explicit apply
+     * avoids.
      *
      * The strip also holds the Pause button, which stops the LSP server's
      * analyses and completions until it is toggled off again, and the
-     * Refresh button, which is disabled while paused because the server
+     * Analyze button, which is disabled while paused because the server
      * skips every tick then; see setPaused.
      */
     private JPanel buildTopicPanel() {
@@ -319,21 +317,21 @@ public class HintsPanel extends JPanel {
         panel.add(new JLabel("Focus:"), BorderLayout.WEST);
         topicField.getEmptyText().setText("Optional topic or goal, e.g. 'thread safety'");
         topicField.setToolTipText(
-                "Optional topic/goal the interpretation is viewed through. Press Enter or click Refresh to set it and re-generate the current file's interpretation; typing alone triggers nothing.");
+                "Optional topic/goal the analysis is viewed through. Press Enter or click Analyze to set it and generate a new analysis of the current file; typing alone triggers nothing. Selecting a previous analysis in the history fills the field with the focus it was generated through.");
         topicField.addActionListener(e -> applyTopic());
         panel.add(topicField, BorderLayout.CENTER);
 
-        refreshButton.setToolTipText("Re-generate the current file's interpretation, applying the topic/goal.");
-        refreshButton.addActionListener(e -> applyTopic());
+        analyzeButton.setToolTipText("Generate a new analysis of the current file, applying the topic/goal; the finished analysis is added to the history.");
+        analyzeButton.addActionListener(e -> applyTopic());
 
         pauseButton.setToolTipText(
-                "Pause interpretations and AI completions so no tokens are spent on them. "
-                        + "The current interpretation stays visible; resuming re-generates the current file's interpretation.");
+                "Pause analyses and AI completions so no tokens are spent on them. "
+                        + "The current analysis stays visible; resuming generates a new analysis of the current file.");
         syncPauseButton();
         pauseButton.addActionListener(e -> setPaused(pauseButton.isSelected()));
 
         JPanel controls = new JPanel(new BorderLayout(4, 0));
-        controls.add(refreshButton, BorderLayout.WEST);
+        controls.add(analyzeButton, BorderLayout.WEST);
         controls.add(pauseButton, BorderLayout.EAST);
         panel.add(controls, BorderLayout.EAST);
         return panel;
@@ -341,69 +339,55 @@ public class HintsPanel extends JPanel {
 
     /**
      * Builds the history strip below the topic strip. The combo lists the
-     * current interpretation and the previous complete interpretations of
-     * the selected file; selecting a previous version displays it in the
-     * panel without changing anything else, and the Restore button makes
-     * the selected version the current interpretation again (see
-     * HintsService.restoreFromHistory).
-     *
-     * Selecting an entry only refreshes the panel: the displayed document
-     * is the selected history entry while the selection points at one,
-     * and the live document (including streaming updates) while the
-     * selection points at "Current". The selection survives refreshes as
-     * long as the history does not change; when a new analysis completes,
-     * the entry indices shift, so the combo is rebuilt and the selection
-     * resets to "Current" (see refresh).
+     * analyses of the selected file, newest first; selecting a previous
+     * analysis displays it in the panel - its Markdown and, in the topic
+     * field, the focus it was generated through - while the newest entry
+     * shows the live document (see refresh). Generating a new analysis
+     * (the Analyze button, Ctrl+S) adds the next entry and returns the
+     * selection to it.
      */
     private JPanel buildHistoryPanel() {
         JPanel panel = new JPanel(new BorderLayout(4, 0));
         panel.add(new JLabel("History:"), BorderLayout.WEST);
         historyCombo.setToolTipText(
-                "Previous interpretations of the current file, newest first, labeled with when they were completed and the focus they were viewed through. Selecting one only displays it; Restore makes it the current interpretation again.");
+                "The analyses of the current file, newest first, labeled with when each was completed and the focus it was viewed through. The newest shows the live document, including the next analysis as it streams in; selecting a previous one shows that analysis and fills the focus field with its focus.");
         historyCombo.addActionListener(e -> {
             if (updatingHistoryCombo) {
                 return;
             }
-            restoreButton.setEnabled(historyCombo.getSelectedIndex() > 0);
             refresh();
         });
         panel.add(historyCombo, BorderLayout.CENTER);
-
-        restoreButton.setToolTipText(
-                "Make the selected previous interpretation the current one again. The interpretation it replaces is kept in the history, so this can be undone the same way.");
-        restoreButton.setEnabled(false);
-        restoreButton.addActionListener(e -> restoreSelectedHistory());
-        panel.add(restoreButton, BorderLayout.EAST);
         return panel;
     }
 
     /**
      * Rebuilds the history combo from renderedHistory and resets the
-     * selection to "Current". Called only when the file or its history
-     * changed, because the entry indices shifted; while the history is
-     * unchanged the user's selection is preserved. The guard flag keeps
-     * the combo's action listener from treating the programmatic
-     * selection change as a user selection.
+     * selection to the newest analysis. Called only when the file or its
+     * analyses changed, because the entry indices shifted; while the
+     * list is unchanged the user's selection is preserved. The guard
+     * flag keeps the combo's action listener from treating the
+     * programmatic selection change as a user selection.
      */
     private void rebuildHistoryCombo() {
         updatingHistoryCombo = true;
         historyCombo.removeAllItems();
-        historyCombo.addItem("Current");
         for (HintsService.HistoryEntry entry : renderedHistory) {
             historyCombo.addItem(historyEntryLabel(entry));
         }
-        historyCombo.setSelectedIndex(0);
-        restoreButton.setEnabled(false);
+        if (!renderedHistory.isEmpty()) {
+            historyCombo.setSelectedIndex(0);
+        }
         updatingHistoryCombo = false;
     }
 
     /**
-     * Returns the combo label for a previous interpretation: when it was
-     * completed and, when it was viewed through a focus, that focus -
-     * like "2026-11-05 23:57 - thread safety", or just
-     * "2026-11-05 23:57" for a focus-less interpretation. The metadata
-     * travels with the history entry itself, recorded when the
-     * interpretation completed (see HintsService.HistoryEntry).
+     * Returns the combo label for an analysis: when it was completed
+     * and, when it was viewed through a focus, that focus - like
+     * "2026-11-05 23:57 - thread safety", or just "2026-11-05 23:57"
+     * for a focus-less analysis. The metadata travels with the history
+     * entry itself, recorded when the analysis completed (see
+     * HintsService.HistoryEntry).
      */
     private static String historyEntryLabel(HintsService.HistoryEntry entry) {
         String timestamp = HISTORY_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(entry.completedAt()));
@@ -413,61 +397,53 @@ public class HintsPanel extends JPanel {
     }
 
     /**
-     * Makes the version selected in the history combo the current
-     * interpretation of the selected file again. The restore swaps the
-     * two documents (see HintsService.restoreFromHistory), the change
-     * notification rebuilds the combo, and the next refresh shows the
-     * restored document as the current one.
-     */
-    private void restoreSelectedHistory() {
-        int index = historyCombo.getSelectedIndex() - 1;
-        String uri = HintsService.getCurrentFileUri();
-        if (index < 0 || uri == null) {
-            return;
-        }
-        HintsService.restoreFromHistory(uri, index);
-    }
-
-    /**
      * Stores the field's text as the current topic and asks the server for
-     * a fresh analysis of the current file, so the new topic takes effect
+     * a new analysis of the current file, so the new topic takes effect
      * immediately instead of only on the next file change or tab switch.
      *
-     * Called by the Refresh button and by pressing Enter in the topic
+     * Called by the Analyze button and by pressing Enter in the topic
      * field; typing alone never triggers anything, so the LLM is never
-     * re-run per keystroke. The status label confirms that the focus was
-     * stored, because the field itself gives no apply feedback; the next
-     * refresh overwrites the label once the re-analysis arrives.
+     * re-run per keystroke. The selection also returns to the live view,
+     * so the new analysis is watched as it streams in and the field stops
+     * showing the focus of a previously selected analysis. The status
+     * label confirms that the focus was stored, because the field itself
+     * gives no apply feedback; the next refresh overwrites the label once
+     * the new analysis arrives.
      */
     private void applyTopic() {
         String topic = topicField.getText().trim();
         HintsService.setTopic(topic);
         statusLabel.setText(topic.isBlank() ? "Focus cleared" : "Focus set: " + topic);
+        updatingHistoryCombo = true;
+        if (historyCombo.getItemCount() > 0) {
+            historyCombo.setSelectedIndex(0);
+        }
+        updatingHistoryCombo = false;
+        refresh();
         HintsFilePoller.pollNow();
     }
 
     /**
-     * Syncs the topic field with the stored topic. The topic is global
-     * (HintsService) while every tab has its own field, so a topic set on
-     * one tab must appear in the other tabs' fields too. The field is
-     * skipped while it has focus, so a refresh never discards text the
-     * user is typing before it is applied.
+     * Syncs the topic field with the given focus: the focus of the
+     * previous analysis the user is browsing, or the stored topic - the
+     * input for the next analysis - while the live view is shown. The
+     * field is skipped while it has focus, so a refresh never discards
+     * text the user is typing before it is applied.
      */
-    private void syncTopicField() {
+    private void syncTopicField(String focus) {
         if (topicField.hasFocus()) {
             return;
         }
-        String stored = HintsService.getTopic();
-        if (!Objects.equals(topicField.getText(), stored)) {
-            topicField.setText(stored);
+        if (!Objects.equals(topicField.getText(), focus)) {
+            topicField.setText(focus);
         }
     }
 
     /**
-     * Sets the pause button's selection and label, and the Refresh
+     * Sets the pause button's selection and label, and the Analyze
      * button's enabled state, from the current pause state. Called from
      * refresh, so a panel recreated while paused shows "Unpause" and a
-     * disabled Refresh button instead of a selected button still reading
+     * disabled Analyze button instead of a selected button still reading
      * "Pause", and the tabs stay consistent when the pause is toggled on
      * another tab.
      */
@@ -475,10 +451,11 @@ public class HintsPanel extends JPanel {
         boolean paused = HintsService.isPaused();
         pauseButton.setSelected(paused);
         pauseButton.setText(paused ? "Unpause" : "Pause");
-        // Refresh forces a re-analysis, and the server skips every tick
-        // while paused, so the button stays disabled until resuming; see
-        // setPaused for the immediate update on the click that toggles.
-        refreshButton.setEnabled(!paused);
+        // Analyze generates a new analysis, and the server skips every
+        // tick while paused, so the button stays disabled until resuming;
+        // see setPaused for the immediate update on the click that
+        // toggles.
+        analyzeButton.setEnabled(!paused);
     }
 
     /**
@@ -491,9 +468,9 @@ public class HintsPanel extends JPanel {
      * "Pause" while analyses run, "Unpause" while they are paused. The
      * selected look alone did not make the two states obvious enough.
      *
-     * Pausing also disables the Refresh button: it forces a re-analysis,
-     * and the server skips every tick while paused, so the click could
-     * do nothing. Resuming re-enables it immediately here;
+     * Pausing also disables the Analyze button: it generates a new
+     * analysis, and the server skips every tick while paused, so the
+     * click could do nothing. Resuming re-enables it immediately here;
      * syncPauseButton keeps the other tabs' buttons consistent on their
      * next refresh.
      *
@@ -506,33 +483,18 @@ public class HintsPanel extends JPanel {
     private void setPaused(boolean paused) {
         HintsService.setPaused(paused);
         pauseButton.setText(paused ? "Unpause" : "Pause");
-        refreshButton.setEnabled(!paused);
+        analyzeButton.setEnabled(!paused);
         statusLabel.setText(paused ? "Paused - no interpretations or completions" : "Resumed");
     }
 
     public void refresh() {
         SwingUtilities.invokeLater(() -> {
-            // The topic and the pause state are global (HintsService), but
-            // every tab has its own panel with its own copy of the controls;
-            // sync them on every refresh so a topic set or a pause toggled
-            // on one tab is reflected on the other tabs. The topic field is
-            // skipped while focused, so a refresh never discards text the
-            // user is typing before it is applied.
-            syncPauseButton();
-            syncTopicField();
-
-            // The server-reported error is handled before the unchanged-
-            // Markdown early return: an error can arrive while the document
-            // stays unchanged (the failed analysis still wrote its fallback
-            // text), and it must reach the status label anyway.
-            String error = HintsService.getErrorMessage();
-            boolean errorChanged = !Objects.equals(error, renderedError);
-
-            // The history of the selected file, and whether the history
-            // combo must be rebuilt: the file changed, a new analysis
-            // completed, an entry was restored, or the analysis was
-            // cleared. All of these shift the entry indices, so the combo
-            // is rebuilt and the selection resets to "Current".
+            // The analyses of the selected file, newest first, and
+            // whether the history combo must be rebuilt: the file
+            // changed, a new analysis completed, or the analyses were
+            // cleared. All of these shift the entry indices, so the
+            // combo is rebuilt and the selection resets to the newest
+            // analysis.
             String currentUri = HintsService.getCurrentFileUri();
             List<HintsService.HistoryEntry> history = HintsService.getHistoryForUri(currentUri);
             boolean historyChanged = !Objects.equals(currentUri, renderedHistoryUri)
@@ -543,15 +505,35 @@ public class HintsPanel extends JPanel {
                 rebuildHistoryCombo();
             }
 
-            // The document to display: the selected previous version while
-            // the user is browsing the history, otherwise the live document
-            // (the merge of the last complete document and the streaming
-            // partial one). Both are reduced to this panel's view - the
-            // sections the names select, or the sections they leave out for
-            // the Etc tab - so every tab shows only its own part of the
-            // analysis.
-            int selectedVersion = historyCombo.getSelectedIndex() - 1;
-            String document = selectedVersion >= 0 && selectedVersion < history.size()
+            // The analysis to display: the selected previous one while the
+            // user is browsing the history, otherwise the live document -
+            // the newest analysis, merged with the partial one while the
+            // next analysis streams in.
+            int selectedVersion = historyCombo.getSelectedIndex();
+            boolean browsingHistory = selectedVersion > 0 && selectedVersion < history.size();
+
+            // The pause state is global (HintsService), but every tab has
+            // its own panel with its own copy of the controls; sync the
+            // pause button on every refresh so a pause toggled on one tab
+            // is reflected on the other tabs. The topic field follows the
+            // selection: browsing a previous analysis shows the focus it
+            // was generated through, otherwise the field shows the stored
+            // topic - the input for the next analysis. The field is
+            // skipped while focused, so a refresh never discards text the
+            // user is typing before it is applied.
+            syncPauseButton();
+            syncTopicField(browsingHistory
+                    ? history.get(selectedVersion).focus()
+                    : HintsService.getTopic());
+
+            // The server-reported error is handled before the unchanged-
+            // Markdown early return: an error can arrive while the document
+            // stays unchanged (the failed analysis still wrote its fallback
+            // text), and it must reach the status label anyway.
+            String error = HintsService.getErrorMessage();
+            boolean errorChanged = !Objects.equals(error, renderedError);
+
+            String document = browsingHistory
                     ? history.get(selectedVersion).markdown()
                     : HintsService.getMarkdown();
             String markdown = filterDocument(document);

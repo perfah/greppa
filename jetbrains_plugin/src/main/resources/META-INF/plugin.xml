@@ -54,9 +54,9 @@
                 implementationClass="com.perfah.greppa.GreppaCompletionWeigher"
                 order="first"/>
         <!-- Subscribes, once per project after startup, the save listener
-             that refreshes the analysis when a document is saved (Ctrl+S,
+             that generates a new analysis when a document is saved (Ctrl+S,
              Save All, autosave) by writing the tick trigger file the
-             reload button uses; see GreppaProjectActivity. -->
+             Analyze button uses; see GreppaProjectActivity. -->
         <postStartupActivity implementation="com.perfah.greppa.GreppaProjectActivity"/>
     </extensions>
 

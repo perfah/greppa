@@ -33,8 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * file has stopped changing.
  *
  * While a stream is in progress, getMarkdown() does not return the partial
- * document verbatim. It merges it with the last complete document of the
- * same file: every section that has fully streamed in replaces its old
+ * document verbatim. It merges it with the file's newest completed
+ * analysis: every section that has fully streamed in replaces its old
  * version, while the sections that have not streamed (yet) keep showing
  * their old content. The panel therefore never blanks and never shows a
  * half-typed section; sections flip from old to new one by one as the
@@ -52,14 +52,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * server clears it by writing an empty error file at the start of every
  * analysis attempt, so the message always describes the latest attempt.
  *
- * The service also keeps a bounded history of the previous complete
- * documents of each file (see completeMarkdownForUri, getHistoryForUri
- * and restoreFromHistory), so the tool window can show and restore them,
- * e.g. after a bad regeneration. Every history entry carries its
- * completion metadata - when the interpretation was completed and the
- * focus it was viewed through (see HistoryEntry) - which the history
- * combo labels the entries with. The history is in-memory only; it does
- * not survive an IDE restart.
+ * The service also keeps a bounded history of each file's analyses (see
+ * completeMarkdownForUri and getHistoryForUri): every finished analysis
+ * becomes an entry, newest first, carrying its completion metadata - when
+ * the analysis was completed and the focus it was viewed through (see
+ * HistoryEntry) - which the history combo labels the entries with. The
+ * newest entry is the file's current analysis and the merge base that the
+ * next analysis of the file streams into; there is no separate current
+ * slot, so generating a new analysis (the Analyze button, Ctrl+S) simply
+ * adds the next entry. The history is in-memory only; it does not survive
+ * an IDE restart.
  *
  * The service also stores the Imports pane's state per file: the entries
  * the local import scan produced (see ImportDetector) plus the files the
@@ -82,30 +84,24 @@ import java.util.concurrent.ConcurrentHashMap;
 public class HintsService {
     private static final Logger LOG = Logger.getInstance(HintsService.class);
 
-    /**
-     * The current complete interpretation per normalized URI, carrying
-     * its completion metadata (see HistoryEntry); the base that the
-     * partial documents of the next analysis are merged into.
-     */
-    private static final Map<String, HistoryEntry> completeByUri = new ConcurrentHashMap<>();
     /** Latest document per normalized URI; partial while a stream is in progress. */
     private static final Map<String, String> latestByUri = new ConcurrentHashMap<>();
     /**
-     * How many previous complete documents are kept per file. Bounded so a
-     * long session cannot grow the history without limit; the oldest entry
-     * is dropped first.
+     * How many analyses are kept per file, the newest included. Bounded so
+     * a long session cannot grow the history without limit; the oldest
+     * entry is dropped first.
      */
     private static final int MAX_HISTORY = 5;
     /**
-     * Previous complete interpretations per normalized URI, newest first:
-     * the interpretation that was current before the latest analysis
-     * completed, then the one before that, and so on. Filled by
-     * completeMarkdownForUri whenever a new complete interpretation
-     * replaces a different one, so the history contains exactly the
-     * analyses the file had, in order. Each entry carries its completion
-     * metadata, which the history combo labels it with (see
-     * HintsPanel.historyEntryLabel). In-memory only, like the documents
-     * themselves.
+     * The analyses of each file, newest first: the entry the latest
+     * finished analysis added, then the one before that, and so on.
+     * Filled by completeMarkdownForUri whenever a finished analysis
+     * differs from the file's newest one, so the list contains exactly
+     * the analyses the file had, in order. The first entry is the file's
+     * current analysis and the merge base that the next analysis streams
+     * into. Each entry carries its completion metadata, which the
+     * history combo labels it with (see HintsPanel.historyEntryLabel).
+     * In-memory only, like the documents themselves.
      */
     private static final Map<String, List<HistoryEntry>> historyByUri = new ConcurrentHashMap<>();
     /**
@@ -168,63 +164,55 @@ public class HintsService {
     }
 
     /**
-     * Registers the complete document of a finished analysis. It becomes
-     * the merge base for the next analysis of the same file, and the
-     * complete document it replaces (when different) becomes the newest
-     * history entry, so the tool window can show and restore it; see
-     * getHistoryForUri.
+     * Registers the complete document of a finished analysis as the file's
+     * newest analysis: the entry is prepended to the file's history, and
+     * it becomes the merge base that the next analysis of the file
+     * streams into. A document identical to the newest entry adds
+     * nothing - the poller's forcePoll re-reads unchanged files on every
+     * Analyze click - so the existing entry and its recorded completion
+     * time are kept.
      *
-     * The entry records the interpretation's completion metadata: it is
+     * The entry records the analysis's completion metadata: it was
      * completed now, viewed through the focus that is currently set
      * (empty when none is) - the data the history combo labels the entry
-     * with (see HintsPanel.historyEntryLabel). Re-committing the
-     * unchanged document (the poller's forcePoll re-reads unchanged
-     * files on every Refresh click) keeps the existing entry, so the
-     * recorded completion time stays when the interpretation was
-     * actually generated instead of refreshing to the re-read.
+     * with (see HintsPanel.historyEntryLabel).
      */
     public static synchronized void completeMarkdownForUri(String uri, String markdown) {
         String normalized = normalizeUri(uri);
         LOG.debug("HintsService.completeMarkdownForUri: raw=" + uri + " normalized=" + normalized
                 + " chars=" + (markdown == null ? 0 : markdown.length()));
         String content = markdown == null ? "" : markdown;
-        HistoryEntry previous = completeByUri.get(normalized);
-        boolean unchanged = previous != null && previous.markdown().equals(content);
-        if (previous != null && !unchanged) {
-            List<HistoryEntry> history = historyByUri.computeIfAbsent(normalized, key -> new ArrayList<>());
-            history.add(0, previous);
-            if (history.size() > MAX_HISTORY) {
-                history.remove(history.size() - 1);
+        List<HistoryEntry> analyses = historyByUri.computeIfAbsent(normalized, key -> new ArrayList<>());
+        boolean unchanged = !analyses.isEmpty() && analyses.get(0).markdown().equals(content);
+        if (!unchanged) {
+            analyses.add(0, new HistoryEntry(content, System.currentTimeMillis(), currentFocus()));
+            if (analyses.size() > MAX_HISTORY) {
+                analyses.remove(analyses.size() - 1);
             }
         }
-        HistoryEntry entry = unchanged
-                ? previous
-                : new HistoryEntry(content, System.currentTimeMillis(), currentFocus());
-        completeByUri.put(normalized, entry);
         latestByUri.put(normalized, content);
         notifyListenersIfCurrentFile(normalized);
     }
 
     /**
-     * Clears the analysis of the given file, together with its history:
-     * without a current document the history entries are meaningless.
+     * Clears the analyses of the given file, together with its streaming
+     * document: without them there is nothing left to show for the file.
      */
     public static synchronized void clearAnalysisForUri(String uri) {
         String normalized = normalizeUri(uri);
         LOG.info("HintsService.clearAnalysisForUri: " + normalized);
-        completeByUri.remove(normalized);
         latestByUri.remove(normalized);
         historyByUri.remove(normalized);
         notifyListenersIfCurrentFile(normalized);
     }
 
     /**
-     * Returns the previous complete interpretations of the given file as
-     * history entries - the Markdown document plus its completion
-     * metadata (see HistoryEntry) - newest first, or an empty list when
-     * there are none (including a null uri). A copy is returned, so
-     * callers can iterate safely while a new analysis updates the
-     * history.
+     * Returns the analyses of the given file as history entries - the
+     * Markdown document plus its completion metadata (see HistoryEntry) -
+     * newest first, or an empty list when there are none (including a
+     * null uri). The first entry is the file's current analysis. A copy
+     * is returned, so callers can iterate safely while a new analysis
+     * updates the list.
      */
     public static synchronized List<HistoryEntry> getHistoryForUri(String uri) {
         if (uri == null) {
@@ -233,45 +221,6 @@ public class HintsService {
         String normalized = normalizeUri(uri);
         List<HistoryEntry> history = historyByUri.get(normalized);
         return history == null ? List.of() : List.copyOf(history);
-    }
-
-    /**
-     * Makes the history entry at the given index (0 = the newest previous
-     * document, as returned by getHistoryForUri) the current complete
-     * document again, for example after a bad regeneration. The document
-     * it replaces is not lost: it becomes the newest history entry, so the
-     * restore can be undone the same way. Both entries keep their
-     * original completion metadata - the history labels keep showing
-     * when each interpretation was actually generated, not when it was
-     * restored or displaced.
-     *
-     * The restore is display-level: the analysis file on disk keeps the
-     * document the server wrote, so the LSP server's completion context is
-     * unaffected, and the next analysis of the file overwrites the panel
-     * again. The restored document is the merge base that next analysis
-     * streams into, though, so the panel never blanks while it generates.
-     */
-    public static synchronized void restoreFromHistory(String uri, int index) {
-        if (uri == null) {
-            return;
-        }
-        String normalized = normalizeUri(uri);
-        List<HistoryEntry> history = historyByUri.get(normalized);
-        if (history == null || index < 0 || index >= history.size()) {
-            return;
-        }
-        HistoryEntry restored = history.remove(index);
-        HistoryEntry current = completeByUri.get(normalized);
-        if (current != null && !current.markdown().equals(restored.markdown())) {
-            history.add(0, current);
-            if (history.size() > MAX_HISTORY) {
-                history.remove(history.size() - 1);
-            }
-        }
-        completeByUri.put(normalized, restored);
-        latestByUri.put(normalized, restored.markdown());
-        LOG.info("HintsService.restoreFromHistory: restored entry " + index + " for " + normalized);
-        notifyListenersIfCurrentFile(normalized);
     }
 
     /**
@@ -443,8 +392,8 @@ public class HintsService {
 
     /**
      * Returns the focus (topic/goal) currently set, trimmed, or the empty
-     * string when none is; recorded as the focus part of an
-     * interpretation's completion metadata (see completeMarkdownForUri).
+     * string when none is; recorded as the focus part of an analysis's
+     * completion metadata (see completeMarkdownForUri).
      */
     private static String currentFocus() {
         String focus = topic;
@@ -493,9 +442,9 @@ public class HintsService {
 
     /**
      * Returns the Markdown analysis document for the currently selected
-     * file, or an empty string if none is available. While an analysis is
-     * streaming, the document is the merge of the last complete document
-     * and the partial one; see the class comment.
+     * file, or an empty string if none is available: the file's newest
+     * analysis, merged with the partial document while an analysis is
+     * streaming; see the class comment.
      */
     public static synchronized String getMarkdown() {
         String currentUri = getCurrentFileUri();
@@ -510,11 +459,12 @@ public class HintsService {
                     + " found=0 keys=" + latestByUri.keySet());
             return "";
         }
-        HistoryEntry base = completeByUri.get(normalized);
-        String merged = mergeDocuments(base == null ? null : base.markdown(), latest);
+        List<HistoryEntry> analyses = historyByUri.get(normalized);
+        String base = analyses == null || analyses.isEmpty() ? null : analyses.get(0).markdown();
+        String merged = mergeDocuments(base, latest);
         LOG.debug("HintsService.getMarkdown: current=" + currentUri + " normalized=" + normalized
                 + " latest=" + latest.length() + " chars base="
-                + (base == null ? "none" : base.markdown().length() + " chars")
+                + (base == null ? "none" : base.length() + " chars")
                 + " merged=" + merged.length() + " chars");
         return merged;
     }
@@ -776,7 +726,7 @@ public class HintsService {
     }
 
     /**
-     * Merges the last complete document of a file (the base) with the
+     * Merges the file's newest completed analysis (the base) with the
      * latest partial one. The server streams a document append-only, so
      * every section of the partial document except the last one is
      * complete: those sections replace their old versions. The last
@@ -873,13 +823,12 @@ public class HintsService {
     }
 
     /**
-     * One completed interpretation: its Markdown document plus the
-     * metadata the history combo labels it with - when it was completed
-     * and the focus (topic/goal) it was viewed through. Immutable: the
-     * service moves entries between the current slot and the history
-     * but never rewrites them, so an entry keeps the metadata of when
-     * the interpretation was actually generated, even after a restore
-     * moves it back to current (see restoreFromHistory).
+     * One completed analysis: its Markdown document plus the metadata
+     * the history combo labels it with - when it was completed and the
+     * focus (topic/goal) it was viewed through. Immutable: the service
+     * prepends entries to the history but never rewrites them, so an
+     * entry keeps the metadata of when the analysis was actually
+     * generated.
      */
     public record HistoryEntry(String markdown, long completedAt, String focus) {}
 
