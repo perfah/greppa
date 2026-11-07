@@ -1,6 +1,7 @@
 package com.perfah.greppa;
 
 import com.intellij.ide.IdeEventQueue;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
@@ -181,11 +182,19 @@ public final class GreppaProjectActivity implements ProjectActivity {
             // The dispatcher is passed as a lambda, so its functional
             // interface's method name never has to be named here, and the
             // null parent means the dispatcher lives for the whole
-            // application, matching the once-per-application guard.
+            // application, matching the once-per-application guard. The
+            // null is cast to Disposable because the IntelliJ IDEA build
+            // of the platform adds a second addDispatcher overload taking
+            // a CoroutineScope, and an untyped null makes the call
+            // ambiguous (the compiler reports both
+            // addDispatcher(NonLockedEventDispatcher, Disposable) and
+            // addDispatcher(NonLockedEventDispatcher, CoroutineScope) as
+            // matching); the cast selects the Disposable overload, which
+            // exists in every targeted IDE build.
             IdeEventQueue.getInstance().addDispatcher(event -> {
                 handleSaveKeystroke(event);
                 return false;
-            }, null);
+            }, (Disposable) null);
             LOG.info("Registered the Greppa save keystroke dispatcher on the IDE event queue");
         } catch (Exception e) {
             LOG.warn("Failed to register the save keystroke dispatcher", e);
