@@ -63,11 +63,14 @@ public class HintsPanel extends JPanel {
 
     /**
      * Formats an analysis's completion time for its history combo label,
-     * like "2026-11-05 23:57": the date and minute the analysis was
-     * completed, in the local time zone.
+     * like "2026-11-05 23:57:42": the date and second the analysis was
+     * completed, in the local time zone. Second, not minute, resolution:
+     * two analyses of a file can complete within the same minute (two
+     * quick saves, for instance), and minute-identical labels made two
+     * distinct analyses look like the same entry twice.
      */
     private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel contentPanel = new JPanel(cardLayout);
@@ -384,10 +387,10 @@ public class HintsPanel extends JPanel {
     /**
      * Returns the combo label for an analysis: when it was completed
      * and, when it was viewed through a focus, that focus - like
-     * "2026-11-05 23:57 - thread safety", or just "2026-11-05 23:57"
-     * for a focus-less analysis. The metadata travels with the history
-     * entry itself, recorded when the analysis completed (see
-     * HintsService.HistoryEntry).
+     * "2026-11-05 23:57:42 - thread safety", or just
+     * "2026-11-05 23:57:42" for a focus-less analysis. The metadata
+     * travels with the history entry itself, recorded when the analysis
+     * completed (see HintsService.HistoryEntry).
      */
     private static String historyEntryLabel(HintsService.HistoryEntry entry) {
         String timestamp = HISTORY_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(entry.completedAt()));
