@@ -550,8 +550,8 @@ Steps in this group must NEVER include an AI agent prompt.\n\n\
 ### Automatable\n\
 Contains the steps that are larger chores and repetitive tasks - work that is not central for understanding the overall program but is too big or too tedious to do by hand, so the user can hand them to an AI agent directly. \
 Number the steps, one short sentence per step. \
-For EVERY step, add a fenced code block whose first line is 'AI agent prompt:' followed by a self-contained prompt that the user can copy-paste to an AI agent to execute the step without any other context. \
-The AI agent prompt is the only code block allowed in this group; do not add normal code snippets here.\n\n\
+For EVERY step, add a fenced code block with a self-contained prompt that the user can copy-paste to an AI agent to execute the step without any other context. \
+The AI agent prompt is the only code block allowed in this group; do not add normal code snippets here. \n\n\
 ### Trivial\n\
 Contains the small mechanical changes the user can easily make themselves - copy-paste edits like adding a missing import, renaming an identifier or fixing a one-liner. \
 Number the steps, one short sentence per step. \
