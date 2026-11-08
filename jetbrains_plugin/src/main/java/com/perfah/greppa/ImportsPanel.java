@@ -62,11 +62,12 @@ import java.util.Set;
  * the model's trained understanding of those. No LLM inference is
  * involved, so the pane never waits. The list is updated manually by
  * design: the scan runs once automatically the first time the pane
- * sees a file, and after that only through the pane's Refresh button.
+ * sees a file, and after that only through the pane's Scan imports
+ * button.
  */
 public class ImportsPanel extends JPanel {
 
-    /** Names the file whose imports are shown. */
+    /** Names the file whose related files are shown. */
     private final JLabel fileLabel = new JLabel(" ");
     /** One row per import; rebuilt on refresh. */
     private final JPanel rowsPanel = new JPanel();
@@ -115,7 +116,7 @@ public class ImportsPanel extends JPanel {
         panel.add(fileLabel, BorderLayout.WEST);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        JButton refreshButton = new JButton("Refresh");
+        JButton refreshButton = new JButton("Scan imports");
         refreshButton.setToolTipText("Re-run the local import scan for the current file.");
         refreshButton.addActionListener(e -> refreshImports());
         buttons.add(refreshButton);
@@ -130,7 +131,7 @@ public class ImportsPanel extends JPanel {
     }
 
     /**
-     * The pane's Refresh button: re-runs the local import scan for the
+     * The pane's Scan imports button: re-runs the local import scan for the
      * current file. The result replaces the scanned entries; the
      * checked state of entries that still resolve to the same file
      * survives, and manually added files are kept (see
@@ -175,7 +176,7 @@ public class ImportsPanel extends JPanel {
             String uri = HintsService.getCurrentFileUri();
             List<HintsService.ImportEntry> entries = HintsService.getImportsForUri(uri);
             // The first time the pane sees a file, scan its imports once;
-            // afterwards the list only changes through the pane's Refresh
+            // afterwards the list only changes through the pane's Scan imports
             // button and Add file, as designed. The scan is a local text
             // scan (ImportDetector), so it costs nothing and never waits.
             if (entries == null && uri != null) {
@@ -209,7 +210,7 @@ public class ImportsPanel extends JPanel {
 
     private void rebuildRows(String uri, List<HintsService.ImportEntry> entries) {
         rowsPanel.removeAll();
-        fileLabel.setText(uri == null ? "No file selected" : "Imports of: " + fileNameOf(uri));
+        fileLabel.setText(uri == null ? "No file selected" : "Related files: " + fileNameOf(uri));
 
         if (uri == null) {
             statusLabel.setText(" ");
