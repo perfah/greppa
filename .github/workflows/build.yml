@@ -60,6 +60,20 @@
 # greppa-<version>-intellij.zip; the version comes from the tag
 # (v1.0.0 -> 1.0.0), so version tags are expected to match the plugin
 # version in plugin.xml.
+#
+# The publish job uploads the plugin to the JetBrains Marketplace, for
+# version tags only like the GitHub release, through the IntelliJ
+# Platform Gradle Plugin's publishPlugin task - one per target,
+# mirroring the build jobs: :publishPlugin publishes the RustRover zip
+# and :idea:publishPlugin the IntelliJ IDEA zip. The task reads the
+# Marketplace personal access token from the intellijPlatformPublishingToken
+# project property, which the job provides through its environment
+# variable spelling (ORG_GRADLE_PROJECT_intellijPlatformPublishingToken)
+# from the PUBLISHING_TOKEN repository secret - like the signing
+# material, the token never appears in the repository or the command
+# line. The job rebuilds the zips it uploads: publishPlugin builds,
+# signs and uploads its own distribution, so it stages the server
+# binaries and passes the signing secrets like the plugin jobs.
 name: Build
 
 on:
@@ -219,6 +233,61 @@ jobs:
         with:
           name: greppa-intellij
           path: jetbrains_plugin/idea/build/distributions/*.zip
+
+  publish:
+    name: Publish to JetBrains Marketplace
+    # Marketplace uploads are releases like the GitHub release below:
+    # only version tags publish. The job needs the plugin jobs so a
+    # broken build never reaches the Marketplace; their zips are not
+    # reused though - publishPlugin builds, signs and uploads its own
+    # distribution - so this job stages the server binaries and passes
+    # the signing secrets exactly like the plugin jobs.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [plugin-rustrover, plugin-intellij]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # All three platform binaries, merged into the staging directory
+      # the Gradle build bundles from; publishPlugin builds the zips it
+      # uploads, so it needs the bundled server binaries like the
+      # plugin jobs.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: server-*
+          merge-multiple: true
+          path: lsp_server/bin
+      # Restore the executable bit the artifact download lost (see the
+      # workflow header comment), so the bundled macOS/Linux server
+      # binaries are executable inside the zips publishPlugin builds.
+      - name: Restore server binary permissions
+        run: chmod +x lsp_server/bin/lsp_server-*
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      # One publishPlugin task per target, mirroring the plugin jobs'
+      # build tasks: the root project's task publishes the RustRover
+      # zip, the idea subproject's task the IntelliJ IDEA zip. The
+      # token reaches Gradle as the intellijPlatformPublishingToken
+      # project property through its ORG_GRADLE_PROJECT_ environment
+      # variable spelling, from the PUBLISHING_TOKEN repository
+      # secret; the signing material is passed too, because
+      # publishPlugin signs the zip it uploads. Both targets share the
+      # plugin id and version, so the two uploads land on the same
+      # Marketplace plugin. chmod guards against the wrapper's
+      # executable bit being lost when the scripts were committed from
+      # Windows.
+      - name: Publish plugin zips
+        working-directory: jetbrains_plugin
+        env:
+          ORG_GRADLE_PROJECT_intellijPlatformPublishingToken: ${{ secrets.PUBLISHING_TOKEN }}
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :publishPlugin :idea:publishPlugin
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
