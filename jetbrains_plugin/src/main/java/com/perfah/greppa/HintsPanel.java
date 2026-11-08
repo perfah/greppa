@@ -281,7 +281,7 @@ public class HintsPanel extends JPanel {
         // Shown only when no analysis file exists for the current file at
         // all - the AI service unreachable or misconfigured, or nothing
         // ever analyzed. While an analysis is generating, the server
-        // writes a "Generating interpretation..." placeholder to the
+        // writes a "Generating analysis..." placeholder to the
         // analysis file, so the panel shows that instead and this card
         // stays hidden. The label's text depends on whether first-time
         // setup is already complete (see updatePlaceholderText) and is
@@ -354,7 +354,7 @@ public class HintsPanel extends JPanel {
     /**
      * Sets the placeholder card's text: the first-time setup steps until
      * an analysis has been displayed at least once, the short "no
-     * interpretation yet" message afterwards. The setup steps used to
+     * analysis yet" message afterwards. The setup steps used to
      * live in the plugin description; they are shown here instead, so
      * they reach the one person who needs them - someone whose setup is
      * not working yet - without filling the Marketplace page. The steps
@@ -371,8 +371,8 @@ public class HintsPanel extends JPanel {
         if (GreppaSettingsState.getInstance().setupComplete) {
             placeholderLabel.setText(
                     "<html><center>" +
-                    "No interpretation yet.<br>" +
-                    "Open a file to generate its interpretation.<br>" +
+                    "No analysis yet.<br>" +
+                    "Open a file to generate its analysis.<br>" +
                     "If none appears, check the AI service settings in<br>" +
                     "<b>Settings | Tools | Greppa</b>." +
                     "</center></html>"
@@ -385,11 +385,9 @@ public class HintsPanel extends JPanel {
                 "1. Install an OpenAI-compatible LLM service. The default<br>" +
                 "example is Ollama (https://ollama.com) with the model<br>" +
                 "<code>ollama pull gemma4:31b-cloud</code>.<br>" +
-                "2. Open a file - its interpretation appears in this window.<br><br>" +
+                "2. Open a file - its analysis appears in this window.<br><br>" +
                 "Any other service or model works too: set its base URL,<br>" +
                 "model and API key in <b>Settings | Tools | Greppa</b>.<br>" +
-                "The plugin bundles its own server, so there is<br>" +
-                "nothing else to install." +
                 "</center></html>"
         );
     }
@@ -597,7 +595,7 @@ public class HintsPanel extends JPanel {
         HintsService.setPaused(paused);
         pauseButton.setText(paused ? "Unpause" : "Pause");
         analyzeButton.setEnabled(!paused);
-        statusLabel.setText(paused ? "Paused - no interpretations or completions" : "Resumed");
+        statusLabel.setText(paused ? "Paused - no analysis or completions" : "Resumed");
     }
 
     /**
@@ -637,7 +635,7 @@ public class HintsPanel extends JPanel {
                 ? null
                 : VirtualFileManager.getInstance().findFileByUrl(currentUri);
         FileSaverDescriptor descriptor = new FileSaverDescriptor(
-                "Export Interpretation", "Save the markdown document", "md");
+                "Export analysis", "Save the markdown document", "md");
         FileSaverDialog dialog = FileChooserFactory.getInstance()
                 .createSaveFileDialog(descriptor, currentProject());
         VirtualFileWrapper wrapper = dialog.save(file == null ? null : file.getParent(),
@@ -668,19 +666,19 @@ public class HintsPanel extends JPanel {
 
     /**
      * Returns the default file name for an export: the analyzed file's
-     * name without its extension plus "-interpretation" - so Main.java
-     * exports as "Main-interpretation.md" - or plain
-     * "interpretation.md" when no file is selected or its name cannot
+     * name without its extension plus "-analysis" - so Main.java
+     * exports as "Main-analysis.md" - or plain
+     * "analysis.md" when no file is selected or its name cannot
      * be resolved.
      */
     private static String suggestedFileName(VirtualFile file) {
         if (file == null) {
-            return "interpretation.md";
+            return "analysis.md";
         }
         String name = file.getName();
         int dot = name.lastIndexOf('.');
         String base = dot > 0 ? name.substring(0, dot) : name;
-        return base + "-interpretation.md";
+        return base + "-analysis.md";
     }
 
     public void refresh() {
@@ -807,14 +805,14 @@ public class HintsPanel extends JPanel {
      * Updates the status label. A server-reported error (the LLM service
      * failed; see HintsService.getErrorMessage) outranks the routine
      * statuses, because it is the only explanation the user gets for a
-     * missing or partial interpretation. It is shown in the same red as
+     * missing or partial analysis. It is shown in the same red as
      * the "Critical for understanding" heading so it stands out; the label
      * returns to its normal foreground once the server clears the error.
      */
     private void showStatus(String error, String markdown) {
         if (error.isBlank()) {
             statusLabel.setForeground(statusForeground);
-            statusLabel.setText(markdown.isBlank() ? " " : "Interpretation loaded");
+            statusLabel.setText(markdown.isBlank() ? " " : "Analysis loaded");
         } else {
             statusLabel.setForeground(CRITICAL_COLOR);
             statusLabel.setText("Error: " + error);

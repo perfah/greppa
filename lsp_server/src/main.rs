@@ -420,7 +420,7 @@ impl LanguageServer for Backend {
             // currently running (if any) is left alone too: cancelling it
             // would discard an almost-current analysis, and for a file's
             // first analysis it would leave the panel stuck on the
-            // "Generating interpretation..." placeholder.
+            // "Generating analysis..." placeholder.
             return;
         }
 
@@ -877,7 +877,7 @@ async fn run_tick(state: &ServerState, force: bool) {
             // Write the placeholder snapshot to disk right away. It is the
             // loading indication for files without a previous analysis:
             // until the first real update arrives the panel would
-            // otherwise keep showing the "No interpretation yet" card,
+            // otherwise keep showing the "No analysis yet" card,
             // which reads like the plugin is not working. For files with
             // a previous analysis the write changes nothing visually -
             // the poller forwards it, but the section merge in

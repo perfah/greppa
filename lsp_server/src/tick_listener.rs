@@ -14,14 +14,14 @@ use tower_lsp::lsp_types::Position;
 /// Placeholder markdown shown while the analysis inference is running.
 /// Written to the analysis file at the start of every tick (see run_tick
 /// in main.rs), so the panel shows a loading indication instead of the
-/// "No interpretation yet" card while the first analysis of a file
+/// "No analysis yet" card while the first analysis of a file
 /// generates; files with a previous analysis keep showing it, because
 /// the section merge in HintsService shows the old document until real
 /// sections stream in. The underscores render as italics in the panel.
 /// pub(crate) so read_analysis_for_uri in main.rs can recognize the
 /// placeholder and not treat it as an analysis document for completion
 /// context.
-pub(crate) const REVIEWING_MESSAGE: &str = "_Generating interpretation..._";
+pub(crate) const REVIEWING_MESSAGE: &str = "_Generating analysis..._";
 
 /// Minimum time between two progress snapshots sent to the tick while the
 /// analysis streams. The model writes the Markdown document top-down from

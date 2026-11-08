@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The Imports pane of the Greppa Interpretation tool window (the
+ * The Imports pane of the Greppa Analysis tool window (the
  * strip at the top of the Relate tab; see HintsToolWindowFactory and
  * OpenImportsPaneAction).
  *
@@ -169,7 +169,7 @@ public class ImportsPanel extends JPanel {
     /**
      * Rebuilds the rows when the current file or its imports changed; a
      * no-op otherwise. The single listener registration is owned by
-     * HintsToolWindowFactory, like for the interpretation panel.
+     * HintsToolWindowFactory, like for the analysis panel.
      */
     public void refresh() {
         SwingUtilities.invokeLater(() -> {

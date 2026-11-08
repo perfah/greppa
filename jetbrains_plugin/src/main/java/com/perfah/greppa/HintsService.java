@@ -475,7 +475,7 @@ public class HintsService {
      * (case-insensitive), in document order. When none of the named
      * sections is present, the text before the first ## heading is
      * returned instead, so a document that is still the "Generating
-     * interpretation..." placeholder keeps the tabs showing the
+     * analysis..." placeholder keeps the tabs showing the
      * placeholder rather than their empty-state card. Public so
      * HintsPanel filters the history entries exactly like the live
      * document (see getHistoryForUri). An empty or null name list returns
@@ -504,7 +504,7 @@ public class HintsService {
      * tab's filter catches (see HintsToolWindowFactory). Like
      * filterSections, the text before the first ## heading is returned
      * when the selection is empty, so a document that is still the
-     * "Generating interpretation..." placeholder shows that instead of
+     * "Generating analysis..." placeholder shows that instead of
      * the panel's empty-state card. An empty or null name list returns
      * the document unchanged.
      */

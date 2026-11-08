@@ -18,7 +18,7 @@ public class RefreshHintsAction extends AnAction {
         // recognizable at a glance and visually distinct from the settings
         // action's gear icon; a null icon left the button without a
         // recognizable symbol.
-        super("Reload", "Re-read the interpretation files and re-generate the current file's interpretation", AllIcons.Actions.Refresh);
+        super("Reload", "Re-generate the current file's analysis", AllIcons.Actions.Refresh);
     }
 
     @Override

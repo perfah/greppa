@@ -12,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * Toolbar action that shows the Relate tab of the Greppa
- * Interpretation tool window, whose top part manages the files attached
+ * Analysis tool window, whose top part manages the files attached
  * to the analysis: the imports of the current file the local scan found,
  * the files the user added manually, and which of them are attached.
  * Placed between the Reload and the Settings actions in the tool
@@ -35,7 +35,7 @@ public class OpenImportsPaneAction extends AnAction {
             return;
         }
         ToolWindow toolWindow = ToolWindowManager.getInstance(project)
-                .getToolWindow("Greppa Interpretation");
+                .getToolWindow("Greppa Analysis");
         if (toolWindow == null) {
             return;
         }

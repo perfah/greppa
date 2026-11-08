@@ -72,7 +72,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
 
     /**
      * Minimum number of characters that must have changed since the last
-     * completed interpretation before writing triggers a new one; default value
+     * completed analysis before writing triggers a new one; default value
      * 0 disables the automatic refresh while writing entirely (the document
      * stays in sync, but only opening a file, switching tabs or the
      * Refresh button re-analyze).
@@ -80,7 +80,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
     public int autoUpdateMinChars = 0;
 
     /**
-     * Whether saving a document refreshes its interpretation: the save
+     * Whether saving a document refreshes its analysis: the save
      * listeners write the tick trigger file (see GreppaProjectActivity),
      * so the LSP server re-analyzes the saved file - also when the file
      * content is unchanged, e.g. after only the caret moved. Unlike the
@@ -98,7 +98,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * runs and the LLM service responds. Until then the tool window's
      * empty state shows the first-time setup steps (install an
      * OpenAI-compatible LLM service, pull the model); afterwards it shows
-     * only the short "no interpretation yet" message, so a working setup
+     * only the short "no analysis yet" message, so a working setup
      * is never walked through the setup steps again. Set by
      * HintsPanel.refresh() on the EDT; persisted like the other settings
      * so it survives an IDE restart.

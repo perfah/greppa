@@ -102,7 +102,7 @@ public class HintsFilePoller implements Runnable {
 
     public void start() {
         instance = this;
-        Thread thread = new Thread(this, "Greppa Interpretation Poller");
+        Thread thread = new Thread(this, "Greppa analysis poller");
         thread.setDaemon(true);
         thread.start();
     }
