@@ -93,6 +93,19 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
     public boolean refreshOnSave = true;
 
     /**
+     * Whether the tool window has displayed an analysis at least once,
+     * which means first-time setup is complete: the bundled LSP server
+     * runs and the LLM service responds. Until then the tool window's
+     * empty state shows the first-time setup steps (install an
+     * OpenAI-compatible LLM service, pull the model); afterwards it shows
+     * only the short "no interpretation yet" message, so a working setup
+     * is never walked through the setup steps again. Set by
+     * HintsPanel.refresh() on the EDT; persisted like the other settings
+     * so it survives an IDE restart.
+     */
+    public boolean setupComplete = false;
+
+    /**
      * Service name under which the API key is stored in the IDE's
      * PasswordSafe: the fully qualified name of this class plus the
      * setting, so the entry is unique and identifiable in the IDE's

@@ -261,16 +261,12 @@ public class HintsPanel extends JPanel {
         // ever analyzed. While an analysis is generating, the server
         // writes a "Generating interpretation..." placeholder to the
         // analysis file, so the panel shows that instead and this card
-        // stays hidden.
-        placeholderLabel.setText(
-                "<html><center>" +
-                "No interpretation yet.<br>" +
-                "Open a file to generate its interpretation.<br>" +
-                "If none appears, check the AI service settings in<br>" +
-                "<b>Settings | Tools | Greppa</b>." +
-                "</center></html>"
-        );
+        // stays hidden. The label's text depends on whether first-time
+        // setup is already complete (see updatePlaceholderText) and is
+        // (re)set whenever the card is shown, so no separate listener is
+        // needed.
         placeholderLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        updatePlaceholderText();
 
         JLabel link = new JLabel("<html><a href=''>Open Greppa Settings</a></html>");
         link.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -295,6 +291,45 @@ public class HintsPanel extends JPanel {
         panel.add(link, gbc);
 
         return panel;
+    }
+
+    /**
+     * Sets the placeholder card's text: the first-time setup steps until
+     * an analysis has been displayed at least once, the short "no
+     * interpretation yet" message afterwards. The setup steps used to
+     * live in the plugin description; they are shown here instead, so
+     * they reach the one person who needs them - someone whose setup is
+     * not working yet - without filling the Marketplace page. Once any
+     * analysis has rendered, the bundled server and the LLM service
+     * demonstrably work, so repeating the install steps would only be
+     * noise; the flag is persisted (see
+     * GreppaSettingsState.setupComplete), so the steps do not return
+     * after an IDE restart either. Called whenever the card is shown.
+     */
+    private void updatePlaceholderText() {
+        if (GreppaSettingsState.getInstance().setupComplete) {
+            placeholderLabel.setText(
+                    "<html><center>" +
+                    "No interpretation yet.<br>" +
+                    "Open a file to generate its interpretation.<br>" +
+                    "If none appears, check the AI service settings in<br>" +
+                    "<b>Settings | Tools | Greppa</b>." +
+                    "</center></html>"
+            );
+            return;
+        }
+        placeholderLabel.setText(
+                "<html><center>" +
+                "<b>First-time setup</b><br>" +
+                "1. Install Ollama (https://ollama.com) and pull the<br>" +
+                "default model: <code>ollama pull gemma4:31b-cloud</code><br>" +
+                "2. Open a file - its interpretation appears in this window.<br><br>" +
+                "Any OpenAI-compatible service works too: set its base URL,<br>" +
+                "model and API key in <b>Settings | Tools | Greppa</b>.<br>" +
+                "The plugin bundles its own server, so there is<br>" +
+                "nothing else to install." +
+                "</center></html>"
+        );
     }
 
     /**
@@ -567,8 +602,18 @@ public class HintsPanel extends JPanel {
             Point viewPosition = fileChanged ? new Point(0, 0) : viewport.getViewPosition();
 
             if (markdown.isBlank()) {
+                updatePlaceholderText();
                 cardLayout.show(contentPanel, "PLACEHOLDER");
             } else {
+                // An analysis has been displayed at least once, so the
+                // bundled server and the LLM service are working:
+                // first-time setup is complete. The flag is persisted,
+                // so the placeholder stops showing the setup steps from
+                // now on, also after an IDE restart.
+                GreppaSettingsState settings = GreppaSettingsState.getInstance();
+                if (!settings.setupComplete) {
+                    settings.setupComplete = true;
+                }
                 List<String> renderedCodeBlocks = new ArrayList<>();
                 String html = MarkdownParser.toHtml(
                         markdown, CRITICAL_COLOR, AUTOMATABLE_COLOR, TRIVIAL_COLOR, renderedCodeBlocks);
