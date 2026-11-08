@@ -3,11 +3,17 @@ package com.perfah.greppa;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.LogicalPosition;
 import com.intellij.openapi.editor.ScrollType;
+import com.intellij.openapi.fileChooser.FileChooserFactory;
+import com.intellij.openapi.fileChooser.FileSaverDescriptor;
+import com.intellij.openapi.fileChooser.FileSaverDialog;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.IconLoader;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.VirtualFileWrapper;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
@@ -23,6 +29,9 @@ import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -101,6 +110,17 @@ public class HintsPanel extends JPanel {
      * setPaused.
      */
     private final JButton analyzeButton = new JButton("Analyze");
+    /**
+     * Exports the markdown document this panel currently shows - the
+     * selected history entry while the user is browsing the history,
+     * otherwise the live document - to a file chosen in the IDE's save
+     * dialog; see exportMarkdown. The full document is written, not this
+     * tab's section-filtered view, so the exported file contains the
+     * whole analysis. Always enabled, also while paused: exporting spends
+     * no LLM tokens, it only writes the already generated document to
+     * disk.
+     */
+    private final JButton exportButton = new JButton("Export");
 
     /**
      * Lists the analyses of the selected file, newest first, each
@@ -384,9 +404,11 @@ public class HintsPanel extends JPanel {
      * avoids.
      *
      * The strip also holds the Pause button, which stops the LSP server's
-     * analyses and completions until it is toggled off again, and the
-     * Analyze button, which is disabled while paused because the server
-     * skips every tick then; see setPaused.
+     * analyses and completions until it is toggled off again, the Analyze
+     * button, which is disabled while paused because the server skips
+     * every tick then (see setPaused), and the Export button, which
+     * writes the currently shown markdown document to a file (see
+     * exportMarkdown).
      */
     private JPanel buildTopicPanel() {
         JPanel panel = new JPanel(new BorderLayout(4, 0));
@@ -406,9 +428,20 @@ public class HintsPanel extends JPanel {
         syncPauseButton();
         pauseButton.addActionListener(e -> setPaused(pauseButton.isSelected()));
 
+        exportButton.setToolTipText(
+                "Export the markdown document currently shown to a file. While browsing the history, the selected analysis is exported; otherwise the live document.");
+        exportButton.addActionListener(e -> exportMarkdown());
+
         JPanel controls = new JPanel(new BorderLayout(4, 0));
         controls.add(analyzeButton, BorderLayout.WEST);
-        controls.add(pauseButton, BorderLayout.EAST);
+        // Pause and Export share the east end through a nested
+        // BorderLayout, which keeps both buttons at their preferred sizes
+        // and gives them the same 4 px spacing the outer strips use;
+        // Export ends up to the right of Pause.
+        JPanel rightControls = new JPanel(new BorderLayout(4, 0));
+        rightControls.add(pauseButton, BorderLayout.WEST);
+        rightControls.add(exportButton, BorderLayout.EAST);
+        controls.add(rightControls, BorderLayout.EAST);
         panel.add(controls, BorderLayout.EAST);
         return panel;
     }
@@ -561,6 +594,89 @@ public class HintsPanel extends JPanel {
         pauseButton.setText(paused ? "Unpause" : "Pause");
         analyzeButton.setEnabled(!paused);
         statusLabel.setText(paused ? "Paused - no interpretations or completions" : "Resumed");
+    }
+
+    /**
+     * Exports the markdown document this panel currently shows to a file
+     * chosen in the IDE's save dialog: the selected history entry while
+     * the user is browsing the history, otherwise the live document -
+     * the same choice refresh() makes for the text pane. The full
+     * document is written, not this tab's section-filtered view, so the
+     * exported file contains the whole analysis whatever tab the button
+     * was clicked on. The save dialog opens at the analyzed file's
+     * directory and suggests a name derived from it (see
+     * suggestedFileName), so the export lands next to the code by
+     * default. Runs on the EDT (button click); the dialog is modal and
+     * the write is one small file operation, so no background threading
+     * is needed. The status label confirms the export - or why nothing
+     * was exported - because the file chooser itself gives no feedback
+     * inside the panel; the next refresh overwrites the label as usual.
+     */
+    private void exportMarkdown() {
+        // The document to export: the selected previous analysis while
+        // the user is browsing the history, otherwise the live document.
+        String currentUri = HintsService.getCurrentFileUri();
+        List<HintsService.HistoryEntry> history = HintsService.getHistoryForUri(currentUri);
+        int selectedVersion = historyCombo.getSelectedIndex();
+        boolean browsingHistory = selectedVersion > 0 && selectedVersion < history.size();
+        String markdown = browsingHistory
+                ? history.get(selectedVersion).markdown()
+                : HintsService.getMarkdown();
+        if (markdown.isBlank()) {
+            statusLabel.setText("Nothing to export yet");
+            return;
+        }
+
+        // The save dialog opens at the analyzed file's directory when it
+        // resolves, so the export lands next to the code by default.
+        VirtualFile file = currentUri == null
+                ? null
+                : VirtualFileManager.getInstance().findFileByUrl(currentUri);
+        FileSaverDescriptor descriptor = new FileSaverDescriptor(
+                "Export Interpretation", "Save the markdown document", "md");
+        FileSaverDialog dialog = FileChooserFactory.getInstance()
+                .createSaveFileDialog(descriptor, currentProject());
+        VirtualFileWrapper wrapper = dialog.save(file == null ? null : file.getParent(),
+                suggestedFileName(file));
+        if (wrapper == null) {
+            return; // The user cancelled the save dialog.
+        }
+        try {
+            Files.write(wrapper.getFile().toPath(), markdown.getBytes(StandardCharsets.UTF_8));
+            statusLabel.setText("Exported to " + wrapper.getFile().getName());
+        } catch (IOException e) {
+            statusLabel.setText("Export failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Returns the first open, non-disposed project, or null when none is
+     * open; the save dialog is parented to it.
+     */
+    private static Project currentProject() {
+        for (Project project : ProjectManager.getInstance().getOpenProjects()) {
+            if (!project.isDisposed()) {
+                return project;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the default file name for an export: the analyzed file's
+     * name without its extension plus "-interpretation" - so Main.java
+     * exports as "Main-interpretation.md" - or plain
+     * "interpretation.md" when no file is selected or its name cannot
+     * be resolved.
+     */
+    private static String suggestedFileName(VirtualFile file) {
+        if (file == null) {
+            return "interpretation.md";
+        }
+        String name = file.getName();
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        return base + "-interpretation.md";
     }
 
     public void refresh() {
