@@ -75,6 +75,19 @@ struct ServerState {
     /// (didOpen/didChange) carries none, so those ticks use the last
     /// reported ones; didClose drops the entry with the document.
     attachments_by_uri: DashMap<String, Vec<tick_listener::AttachedFile>>,
+    /// The analysis the IDE's tool window has selected in its history
+    /// (an older entry), keyed by uri: the completion prompt uses it as
+    /// its context instead of the server's own latest analysis, so
+    /// auto-complete follows the analysis the user is looking at. Set
+    /// and cleared by the selection file the IDE writes whenever its
+    /// history selection changes (see watch_trigger_files); a missing
+    /// entry means the live view, i.e. the server's own latest analysis
+    /// (see read_analysis_for_uri). Dropped with the document on
+    /// didClose, like the errors and attachments. Not dropped when a
+    /// new analysis completes: the IDE writes the clear at the exact
+    /// moment its panel resets to the live view, so completions stay
+    /// in step with what the panel shows.
+    selection_by_uri: DashMap<String, String>,
     /// Whether the IDE's Pause button is active. While paused no analysis
     /// tick runs - file opens, edits, tab switches and the reload button
     /// are all skipped - and completion requests return no items, so no
@@ -107,6 +120,7 @@ impl ServerState {
             last_analyzed: Mutex::new(None),
             errors_by_uri: DashMap::new(),
             attachments_by_uri: DashMap::new(),
+            selection_by_uri: DashMap::new(),
             paused: AtomicBool::new(false),
             tick_listener,
             client: Mutex::new(None),
@@ -187,6 +201,22 @@ struct TriggerFileParams {
 #[derive(Debug, Deserialize)]
 struct PauseFileParams {
     paused: bool,
+}
+
+/// Parameters for the selection file the IDE writes when the history
+/// selection in its tool window changes: the analysis the auto-complete
+/// should use as its context. Same file-based mechanism as the tick and
+/// pause trigger files (see watch_trigger_files); a dedicated file, not a
+/// field in the tick trigger, because a tick fires a re-analysis and
+/// selecting a history entry must not spend LLM tokens.
+#[derive(Debug, Deserialize)]
+struct SelectionFileParams {
+    uri: String,
+    /// The selected analysis's markdown, or null when the tool window
+    /// shows the live view - the server then completes from its own
+    /// latest analysis again.
+    #[serde(default)]
+    markdown: Option<String>,
 }
 
 /// Custom service wrapper that routes standard LSP requests to the inner
@@ -422,6 +452,10 @@ impl LanguageServer for Backend {
         // trigger file.
         self.state.errors_by_uri.remove(&uri);
         self.state.attachments_by_uri.remove(&uri);
+        // The selected-analysis override belongs to the closed document
+        // too; a reopened file completes from the server's own latest
+        // analysis until the tool window selects a history entry again.
+        self.state.selection_by_uri.remove(&uri);
         log_message(&format!("Document closed: {}", uri));
         if let Err(e) = remove_hints_file(&uri) {
             log_message(&format!("Failed to remove analysis file for {}: {}", uri, e));
@@ -463,14 +497,21 @@ impl LanguageServer for Backend {
             document_text.len()
         ));
 
-        // The analysis document of a previous tick, when one exists. It
-        // gives the completion context about what the code does and what
-        // changes are planned, so the suggestion fits the file instead of
-        // echoing code that already exists.
-        let analysis = read_analysis_for_uri(&uri);
+        // The analysis document to use as completion context: the history
+        // entry the user selected in the tool window, when one is set for
+        // this file (see selection_by_uri), otherwise the server's own
+        // latest analysis - which is what the tool window's live view
+        // shows. The selected entry can be an older analysis, so the
+        // completions follow the analysis the user is actually looking
+        // at instead of always the newest one.
+        let (analysis, source) = match self.state.selection_by_uri.get(&uri) {
+            Some(selected) => (Some(selected.clone()), "the selected history entry"),
+            None => (read_analysis_for_uri(&uri), "the latest analysis"),
+        };
         match &analysis {
             Some(analysis) => log_message(&format!(
-                "Completion context: using analysis document ({} chars) for {}",
+                "Completion context: using {} ({} chars) for {}",
+                source,
                 analysis.chars().count(),
                 uri
             )),
@@ -869,7 +910,7 @@ async fn run_tick(state: &ServerState, force: bool) {
             // Whether a newer trigger cancelled this analysis.
             let mut cancelled = false;
 
-            // The listener streams the document top-down as the model
+            // The listener streams the document top down as the model
             // generates it, so updates arrive continuously. Writing the
             // file for every update would rewrite it dozens of times per
             // second while the IDE poller only picks up changes a few times
@@ -980,6 +1021,15 @@ async fn run_tick(state: &ServerState, force: bool) {
 ///   fresh analysis of the current file so the panel does not sit on
 ///   stale content.
 ///
+/// - selection.trigger: set or clear the analysis the auto-complete
+///   uses as its context (the history selection in the tool window).
+///   The selected markdown is stored per file and the completion
+///   prompt uses it instead of the server's own latest analysis; a
+///   null markdown clears the override, so completions follow the
+///   tool window's live view again. A dedicated file, not a field in
+///   the tick trigger: a tick fires a re-analysis, and selecting a
+///   history entry must not spend LLM tokens.
+///
 /// All files are deleted immediately after reading so each is
 /// processed exactly once. The poll interval matches the IDE-side
 /// hints poller (250 ms), so the perceived latency of a tab switch or
@@ -987,6 +1037,7 @@ async fn run_tick(state: &ServerState, force: bool) {
 async fn watch_trigger_files(state: Arc<ServerState>) {
     let trigger_path = hints_dir().join("tick.trigger");
     let pause_path = hints_dir().join("pause.trigger");
+    let selection_path = hints_dir().join("selection.trigger");
     log_message(&format!(
         "Watching for trigger file at {}",
         trigger_path.display()
@@ -1022,6 +1073,42 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
                 }
                 Err(e) => {
                     log_message(&format!("pause file: failed to parse: {}", e));
+                }
+            }
+        }
+
+        // The selection file is processed before the tick file because
+        // the tick read below continues the loop when no tick file
+        // exists, which would otherwise starve the selection until a
+        // tick arrives.
+        if let Ok(content) = fs::read_to_string(&selection_path) {
+            // Delete the selection file immediately so it is processed
+            // exactly once.
+            let _ = fs::remove_file(&selection_path);
+
+            match serde_json::from_str::<SelectionFileParams>(&content) {
+                Ok(params) => {
+                    let uri = normalize_uri(&params.uri);
+                    match params.markdown {
+                        Some(markdown) if !markdown.trim().is_empty() => {
+                            log_message(&format!(
+                                "selection file: completions for {} use the selected analysis ({} chars)",
+                                uri,
+                                markdown.chars().count()
+                            ));
+                            state.selection_by_uri.insert(uri, markdown);
+                        }
+                        _ => {
+                            log_message(&format!(
+                                "selection file: completions for {} use the latest analysis again",
+                                uri
+                            ));
+                            state.selection_by_uri.remove(&uri);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log_message(&format!("selection file: failed to parse: {}", e));
                 }
             }
         }
