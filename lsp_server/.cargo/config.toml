@@ -1,2 +1,10 @@
-[build]
-rustflags = ["-C", "target-cpu=native"]
+# No rustflags. The binaries built here are compiled on GitHub's CI
+# runners and distributed with the plugin, so they must run on every
+# x86-64 CPU. -C target-cpu=native tuned them to whichever runner built
+# them, which crashed rustc itself on some of the Windows runners
+# (STATUS_ILLEGAL_INSTRUCTION - the flaky builds that needed retries)
+# and would ship binaries that crash the same way on end-user CPUs
+# lacking the runner's instructions. The server is I/O-bound around the
+# LLM service, so the portable default costs nothing. For a local build
+# tuned to your own machine, set RUSTFLAGS="-C target-cpu=native" in
+# your environment instead of committing it here.
