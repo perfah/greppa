@@ -7,6 +7,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.util.IconLoader;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
@@ -21,6 +22,7 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -264,7 +266,8 @@ public class HintsPanel extends JPanel {
         // stays hidden. The label's text depends on whether first-time
         // setup is already complete (see updatePlaceholderText) and is
         // (re)set whenever the card is shown, so no separate listener is
-        // needed.
+        // needed. The plugin's logo sits centered above the text (see
+        // buildLogoLabel).
         placeholderLabel.setHorizontalAlignment(SwingConstants.CENTER);
         updatePlaceholderText();
 
@@ -280,17 +283,52 @@ public class HintsPanel extends JPanel {
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
-        gbc.gridy = 0;
         gbc.weightx = 1;
         gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        gbc.gridy = 0;
+        gbc.insets = JBUI.insetsBottom(16);
+        panel.add(buildLogoLabel(), gbc);
+
+        gbc.gridy = 1;
         gbc.insets = JBUI.insetsBottom(8);
         panel.add(placeholderLabel, gbc);
 
-        gbc.gridy = 1;
+        gbc.gridy = 2;
         gbc.insets = JBUI.emptyInsets();
         panel.add(link, gbc);
 
         return panel;
+    }
+
+    /**
+     * Returns the plugin's logo as a centered label: the same icon.svg
+     * the tool window button and the README use, rendered at a fixed
+     * 64x64 so the empty state shows it at a reasonable size whatever
+     * size the SVG itself declares (tool window icons are authored
+     * small, which would be a speck here). Swing cannot render SVG, so
+     * the icon is loaded through the IDE's IconLoader, rasterized, and
+     * smoothly scaled; the target size goes through JBUI.scale so HiDPI
+     * displays get a proportionally larger, sharper image. The icon is a
+     * white glyph on a transparent background, so the panel's own
+     * background shows through; it is clearly visible on the dark
+     * theme's dark background, but blends into the light theme's white
+     * one.
+     */
+    private static JLabel buildLogoLabel() {
+        Icon icon = IconLoader.getIcon("/icon.svg", HintsPanel.class);
+        BufferedImage image = new BufferedImage(
+                icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            icon.paintIcon(null, graphics, 0, 0);
+        } finally {
+            graphics.dispose();
+        }
+        int size = JBUI.scale(64);
+        JLabel label = new JLabel(new ImageIcon(image.getScaledInstance(size, size, Image.SCALE_SMOOTH)));
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        return label;
     }
 
     /**
