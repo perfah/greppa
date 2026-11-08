@@ -28,7 +28,6 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -323,30 +322,57 @@ public class HintsPanel extends JPanel {
 
     /**
      * Returns the plugin's logo as a centered label: the same icon.svg
-     * the tool window button and the README use, rendered at a fixed
+     * the tool window button and the README use, shown at a fixed
      * 64x64 so the empty state shows it at a reasonable size whatever
      * size the SVG itself declares (tool window icons are authored
-     * small, which would be a speck here). Swing cannot render SVG, so
-     * the icon is loaded through the IDE's IconLoader, rasterized, and
-     * smoothly scaled; the target size goes through JBUI.scale so HiDPI
-     * displays get a proportionally larger, sharper image. The icon is a
-     * white glyph on a transparent background, so the panel's own
-     * background shows through; it is clearly visible on the dark
-     * theme's dark background, but blends into the light theme's white
-     * one.
+     * small, which would be a speck here). The target size goes through
+     * JBUI.scale so HiDPI displays get a proportionally larger icon.
+     *
+     * The icon is painted through a scaled Graphics2D instead of being
+     * rasterized once and rescaled as a bitmap: ImageIcon is not
+     * HiDPI-aware, so on a scaled display (a retina Mac, Windows at
+     * 125-200%) the pre-scaled bitmap was stretched to the device
+     * resolution with nearest-neighbor interpolation, which made the
+     * logo look pixelated. Painting the loaded icon through a transform
+     * lets the platform rasterize the SVG at the pixel density the
+     * display asks for, and the bilinear interpolation hint keeps the
+     * result smooth even if the icon rasterizes at a fixed size. The
+     * icon is a white glyph on a transparent background, so the
+     * panel's own background shows through; it is clearly visible on
+     * the dark theme's dark background, but blends into the light
+     * theme's white one.
      */
     private static JLabel buildLogoLabel() {
         Icon icon = IconLoader.getIcon("/icon.svg", HintsPanel.class);
-        BufferedImage image = new BufferedImage(
-                icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = image.createGraphics();
-        try {
-            icon.paintIcon(null, graphics, 0, 0);
-        } finally {
-            graphics.dispose();
-        }
         int size = JBUI.scale(64);
-        JLabel label = new JLabel(new ImageIcon(image.getScaledInstance(size, size, Image.SCALE_SMOOTH)));
+        Icon logo = new Icon() {
+            @Override
+            public void paintIcon(Component c, Graphics g, int x, int y) {
+                Graphics2D graphics = (Graphics2D) g.create();
+                try {
+                    graphics.setRenderingHint(
+                            RenderingHints.KEY_INTERPOLATION,
+                            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                    graphics.translate(x, y);
+                    double scale = (double) size / Math.max(1, icon.getIconWidth());
+                    graphics.scale(scale, scale);
+                    icon.paintIcon(c, graphics, 0, 0);
+                } finally {
+                    graphics.dispose();
+                }
+            }
+
+            @Override
+            public int getIconWidth() {
+                return size;
+            }
+
+            @Override
+            public int getIconHeight() {
+                return size;
+            }
+        };
+        JLabel label = new JLabel(logo);
         label.setHorizontalAlignment(SwingConstants.CENTER);
         return label;
     }
