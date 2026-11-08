@@ -58,7 +58,9 @@ fn section_enabled(key: &str) -> bool {
 ///     Relevant concepts / Diagram)
 ///   ## Relationship to other files (Depends on / Used by: what the
 ///     analyzed file takes from each attached file, and what each
-///     attached file takes from the analyzed one)
+///     attached file takes from the analyzed one; The big picture: what
+///     the analyzed file and the attached files accomplish together as
+///     one whole)
 ///   ## Parts (the file split into line-range segments)
 ///   ## Suggested direction (the next steps on a high conceptual level)
 ///   ## Problems (Compilation and Logical subsections)
@@ -355,18 +357,22 @@ visualize.* instead.\n"
     };
 
     // The Relationship to other files section: how the analyzed file and
-    // each attached file relate, in both directions. The attachments
-    // carry no direction tag: the model determines the direction of each
+    // each attached file relate, in both directions, plus the big
+    // picture of what they do together. The attachments carry no
+    // direction tag: the model determines the direction of each
     // relationship from where the references appear - a reference to
     // the attached file in the analyzed code, or a reference to the
     // analyzed file in the attached file's content - and sorts every
     // attachment into the Depends on and Used by subsections
     // accordingly. That is what makes the manual quick adds work: a
     // file that imports the analyzed one, attached from the Imports
-    // pane, lands under Used by without any extra plumbing. Empty when
-    // the user disabled the section; the attachments themselves stay in
-    // the prompt as context either way: they inform every section, not
-    // only this one.
+    // pane, lands under Used by without any extra plumbing. The big
+    // picture subsection then contrasts those two literal per-file
+    // lists: flowing prose that makes sense of the analyzed file and
+    // the attached files as one whole - what they accomplish together,
+    // not another inventory. Empty when the user disabled the section;
+    // the attachments themselves stay in the prompt as context either
+    // way: they inform every section, not only this one.
     let relationship_section = if !relationship_enabled {
         String::new()
     } else {
@@ -387,6 +393,11 @@ Write *None.* when no attached file belongs here.\n\n\
 One bullet per attached file that uses the analyzed file, each starting with the file's name and describing what that file takes from the analyzed one: \
 which functions, types or values it uses, and the role the analyzed file plays for it, like: - main.rs: Calls this file's prompt builders to generate its analysis prompts. \
 Write *None.* when no attached file belongs here.\n\n\
+### The big picture\n\
+Step back from the per-file lists above and make sense of the files as one whole: what the analyzed file and the attached files accomplish together, the shared purpose or system they form, and the role each file plays in that story - especially the analyzed file's. \
+Explain how the pieces fit: what flows between the files, what each contributes, and why the whole works the way it does. \
+Write this as a few paragraphs of flowing prose, not bullets or per-file entries: in contrast to the literal lists above, this section synthesizes - it should read like an explanation of the system these files form together, not like another inventory. \
+If no files are attached, write *Nothing to relate.* instead.\n\n\
 ### Diagram\n\n\
 Create a compact flowchart in ASCII art showing how the analyzed file relates to the attached files: \
 the analyzed file as one node, every attached file as its own node, and labeled arrows for what flows where: \
