@@ -26,6 +26,18 @@ class LspTabSelectionListener : FileEditorManagerListener {
     override fun selectionChanged(event: FileEditorManagerEvent) {
         val newFile: VirtualFile = event.newFile ?: return
 
+        // Opening a file selects it, so this listener also fires on file
+        // opens; both are the "refresh on open" trigger and are gated by
+        // the same setting (see GreppaSettingsState.refreshOnOpen). Read
+        // at event time, so toggling the setting applies to tab switches
+        // immediately. When off, no notification is sent and switching or
+        // opening files spends no tokens; the Analyze button remains the
+        // explicit trigger.
+        if (!GreppaSettingsState.getInstance().refreshOnOpen) {
+            LOG.info("LspTabSelectionListener: refresh on open disabled, not requesting an analysis of ${newFile.url}")
+            return
+        }
+
         LOG.info("LspTabSelectionListener: selection changed to ${newFile.url}")
 
         // The Greppa server runs under IntelliJ's own LSP API

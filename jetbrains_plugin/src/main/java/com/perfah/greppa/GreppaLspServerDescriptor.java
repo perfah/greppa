@@ -135,6 +135,22 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
                 "ANTIVIBER_AUTO_UPDATE_MIN_CHARS",
                 String.valueOf(settings.autoUpdateMinChars));
         LOG.info("Setting ANTIVIBER_AUTO_UPDATE_MIN_CHARS to " + settings.autoUpdateMinChars);
+        // Whether opening a file triggers its analysis: the server's
+        // did_open handler schedules a tick 500 ms after the open when
+        // this is on (see refresh_on_open in main.rs). Always passed,
+        // like the auto-refresh threshold above: the setting is a
+        // boolean with a default rather than an optional string, and the
+        // server's own fallback (off) only applies when the variable is
+        // unset, which does not happen when the plugin launches the
+        // server. The IDE's tab-selection listener - which also fires on
+        // file opens, because opening a file selects it - is gated by
+        // the same setting on the IDE side (see
+        // LspTabSelectionListener), so both open triggers follow one
+        // toggle.
+        commandLine.withEnvironment(
+                "ANTIVIBER_REFRESH_ON_OPEN",
+                String.valueOf(settings.refreshOnOpen));
+        LOG.info("Setting ANTIVIBER_REFRESH_ON_OPEN to " + settings.refreshOnOpen);
         LOG.info("Greppa LSP command line: " + commandLine.getCommandLineString());
         return commandLine;
     }
