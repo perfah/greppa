@@ -15,7 +15,7 @@
         <p>Instead of handing control to an agent that edits the code, Greppa is a
         soft-assist that follows along as you work: it automatically identifies the tasks
         you should do yourself, leaves the rest to an agent, analyzes your changes and
-        gives feedback. How agentic it gets is up to you.</p>
+        gives feedback.</p>
 
         <p>An LLM generates a Markdown analysis of the file you are working on, on the
         fly, and channels it into three workflows in the <b>Greppa</b> tool window:</p>
@@ -26,25 +26,21 @@
             explained segments linked to their source lines.</li>
             <li><b>Improve</b> - critique the code: compilation and logical errors,
             immediately explained with a suggested course correction, and tasks sorted
-            into "Critical for understanding" and "Automatable", guided by your own
-            configurable guidelines.</li>
+            into "Critical for understanding", "Automatable" or "Trivial", guided by your
+            own configurable guidelines.</li>
             <li><b>Relate</b> - see how the file relates to its dependencies, based on
-            its imports.</li>
+            its imports or other files.</li>
         </ul>
 
         <p>Optionally set a topic or goal to focus on; it shapes most or all generated
         content.</p>
 
-        <p>The analysis is fed back to the LLM, enabling auto-complete with an
-        extraordinarily rich context - compilation errors, logical errors, imported code
+        <p>The analysis is fed back to the LLM, enabling auto-complete with a
+        rich context - compilation errors, logical errors, imported code
         files, your topic or goal, and the code file itself - as well as code action
-        suggestions. For example, auto-complete can finish an import to a library it has
-        already recognized, or a Tetris implementation that uses your
-        <code>graphics.java</code> file.</p>
+        suggestions. For example, auto-complete can finish an import to a library, or solve a bug.</p>
 
-        <p>Greppa works with any OpenAI-compatible provider and bundles its own server,
-        so there is nothing else to install. First-time setup instructions appear in the
-        Greppa tool window.</p>
+        <p>The plugin requires an OpenAI-compatible API endpoint, which can be hosted in the cloud or run locally through a compatible inference server.</p>
     ]]></description>
 
     <idea-version since-build="232.0"/>
