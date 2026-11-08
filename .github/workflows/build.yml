@@ -26,11 +26,16 @@
 # The build scripts need no signing configuration: the IntelliJ
 # Platform Gradle Plugin 2.x (see build.gradle.kts) registers a
 # signPlugin task per project whose certificate chain, private key and
-# password default to those environment variables, and the task signs
-# the buildPlugin zip in place - so the artifact paths below still
-# point at the signed zips. A local ./gradlew buildPlugin without the
-# variables stays unsigned, which only matters for Marketplace uploads,
-# not for the runIde sandbox or installing from disk.
+# password default to those environment variables. The task writes the
+# signed zip under the original buildPlugin name (greppa-<version>.zip)
+# and keeps its unsigned input alongside it as <name>-unsigned.zip.
+# The unsigned copy is a build intermediate nothing consumes - every
+# consumer (Marketplace upload, install from disk, release asset) takes
+# the signed zip - so the plugin jobs remove it before the upload and
+# the artifact paths below catch the signed zip only. A local
+# ./gradlew buildPlugin without the variables stays unsigned, which
+# only matters for Marketplace uploads, not for the runIde sandbox or
+# installing from disk.
 #
 # The signature lives in the zip file itself, so the exact zip
 # signPlugin produces is what gets uploaded and released: the previous
@@ -122,10 +127,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       # The qualified :buildPlugin task name builds only the root
       # project's zip (the RustRover target); the IntelliJ IDEA zip is
-      # built by the plugin-intellij job. signPlugin then signs that zip
-      # in place, reading the signing material from the environment.
-      # chmod guards against the wrapper's executable bit being lost
-      # when the scripts were committed from Windows.
+      # built by the plugin-intellij job. signPlugin then signs that
+      # zip, reading the signing material from the environment, and
+      # leaves two zips in the distributions directory: the signed one
+      # under the original name and its unsigned input as
+      # <name>-unsigned.zip (see the workflow header comment). chmod
+      # guards against the wrapper's executable bit being lost when
+      # the scripts were committed from Windows.
       - name: Build and sign plugin zip
         working-directory: jetbrains_plugin
         env:
@@ -135,13 +143,23 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :buildPlugin :signPlugin
+      # signPlugin keeps its unsigned input zip next to the signed one
+      # (its name contains "unsigned"); nothing consumes it - every
+      # consumer takes the signed zip (see the workflow header comment)
+      # - so remove it here. The upload path below then catches the
+      # signed zip only, and the release job's rename gets exactly one
+      # zip per artifact. rm -f keeps the step green should a future
+      # plugin version stop producing the unsigned copy.
+      - name: Remove unsigned plugin zip
+        run: rm -f jetbrains_plugin/build/distributions/*unsigned*.zip
       # The signed zip itself is the artifact: the signature lives in
       # the zip file, so the exact zip signPlugin produced must be what
       # is uploaded and released - extracting the plugin folder and
-      # re-zipping it (the previous flow) yields an unsigned zip. A
-      # download is therefore GitHub's wrapper zip holding the signed
-      # plugin zip; installing from an artifact download takes one
-      # extraction.
+      # re-zipping it (the previous flow) yields an unsigned zip. With
+      # the unsigned copy removed above, the glob catches the signed
+      # zip only. A download is therefore GitHub's wrapper zip holding
+      # the signed plugin zip; installing from an artifact download
+      # takes one extraction.
       - uses: actions/upload-artifact@v4
         with:
           name: greppa-rustrover
@@ -173,9 +191,12 @@ jobs:
       # The qualified :idea:buildPlugin task name builds only the idea
       # subproject's zip (the IntelliJ IDEA target); the RustRover zip
       # is built by the plugin-rustrover job. signPlugin then signs
-      # that zip in place, reading the signing material from the
-      # environment. chmod guards against the wrapper's executable bit
-      # being lost when the scripts were committed from Windows.
+      # that zip, reading the signing material from the environment,
+      # and leaves two zips in the distributions directory: the signed
+      # one under the original name and its unsigned input as
+      # <name>-unsigned.zip (see the workflow header comment). chmod
+      # guards against the wrapper's executable bit being lost when
+      # the scripts were committed from Windows.
       - name: Build and sign plugin zip
         working-directory: jetbrains_plugin
         env:
@@ -185,6 +206,13 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :idea:buildPlugin :idea:signPlugin
+      # signPlugin keeps its unsigned input zip next to the signed one;
+      # nothing consumes it, so remove it here - see the rustrover
+      # job's removal step for the reasoning. rm -f keeps the step
+      # green should a future plugin version stop producing the
+      # unsigned copy.
+      - name: Remove unsigned plugin zip
+        run: rm -f jetbrains_plugin/idea/build/distributions/*unsigned*.zip
       # The signed zip itself is the artifact; see the rustrover job's
       # upload step for why the zip must not be unpacked.
       - uses: actions/upload-artifact@v4
@@ -209,10 +237,12 @@ jobs:
           path: dist
       # The release assets are the signed zips the plugin jobs built,
       # renamed to their versioned names - not re-zipped, which would
-      # strip the signature (see the workflow header comment). The
-      # version comes from the tag (v1.0.0 -> 1.0.0): the release only
-      # runs for version tags, which are expected to match the plugin
-      # version in plugin.xml.
+      # strip the signature (see the workflow header comment). Each
+      # artifact holds exactly one zip - the plugin jobs removed the
+      # unsigned copies - so each glob matches a single file and the
+      # rename cannot collide. The version comes from the tag
+      # (v1.0.0 -> 1.0.0): the release only runs for version tags,
+      # which are expected to match the plugin version in plugin.xml.
       - name: Stage release assets
         shell: bash
         run: |
