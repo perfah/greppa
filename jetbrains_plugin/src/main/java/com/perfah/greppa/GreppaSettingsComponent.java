@@ -79,7 +79,7 @@ public class GreppaSettingsComponent {
     private final JTextArea guidelineField = new JTextArea(4, 40);
     /**
      * Minimum number of characters that must have changed since the last
-     * interpretation before writing triggers a new one; 0 disables the
+     * analysis before writing triggers a new one; 0 disables the
      * automatic refresh while writing. A spinner instead of a text field,
      * so the value is always a valid non-negative number.
      */
@@ -90,7 +90,7 @@ public class GreppaSettingsComponent {
      * GreppaSettingsState.refreshOnSave). A checkbox with its own label
      * rather than a labeled form row, because it is a single boolean.
      */
-    private final JBCheckBox refreshOnSaveField = new JBCheckBox("Refresh interpretation on save");
+    private final JBCheckBox refreshOnSaveField = new JBCheckBox("Refresh analysis on save");
     /** The section checkboxes by section key, built from SECTIONS in document order. */
     private final Map<String, JBCheckBox> sectionCheckBoxes = new LinkedHashMap<>();
 
@@ -116,16 +116,16 @@ public class GreppaSettingsComponent {
         guidelineField.setWrapStyleWord(true);
         guidelineField.setToolTipText(
                 "Free-text standing instructions for the LLM, e.g. 'prefer functional style, never suggest unsafe code'. "
-                        + "Applied to all interpretations and completions. Empty = no guideline.");
+                        + "Applied to all analyses and completions. Empty = no guideline.");
 
         autoUpdateMinCharsField.setToolTipText(
-                "Minimum number of characters that must have changed since the last interpretation "
+                "Minimum number of characters that must have changed since the last analysis "
                         + "before typing triggers a new one. 0 disables the automatic refresh while typing; "
                         + "opening a file, switching tabs and the Refresh button still re-analyze. "
                         + "Default: 0 (automatic refresh off).");
 
         refreshOnSaveField.setToolTipText(
-                "When on, saving a file (Ctrl+S, Save All and the IDE's autosaves alike) re-generates its interpretation. "
+                "When on, saving a file (Ctrl+S, Save All and the IDE's autosaves alike) re-generates its analysis. "
                         + "The refresh also runs when the file content is unchanged - e.g. after moving only the cursor - "
                         + "so the analysis reflects the current caret. Takes effect immediately; no restart needed.");
 
