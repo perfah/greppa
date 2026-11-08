@@ -566,7 +566,7 @@ If there is nothing to suggest, write *No suggestions.* and omit all three ### s
         "You are an expert code reviewer. Analyze the code at the bottom and answer with a single Markdown document - no text before or after it. \
 Start the document directly with its first ## heading. Never wrap the whole document, or any whole section, in a fenced code block or in BEGIN/END-style markers; only the individual code snippets and AI agent prompts described later may be fenced. \
 {topic_section}\
-{guideline_section}\
+{guideline_section}\n\
 
 The document must contain all sections below, in this order, each introduced by a ## heading with exactly the text afterwards:
 The text under each heading below tells you what to write; it is never content to copy into the document.
@@ -602,6 +602,18 @@ END CODE{attachments_section}"
 /// the old prompt named only the line and column numbers over the raw
 /// code, and the model kept echoing code that already existed.
 ///
+/// The analysis's recommendations take precedence over continuing the
+/// existing code: the prompt names the caret's line and tells the model
+/// to first look for a recommendation step whose Line N reference
+/// matches it and, when one exists, to complete with that step's code -
+/// the part of its snippet that follows the caret. Without that
+/// precedence the model treated the analysis as passive context and
+/// completed from the file's existing patterns: asked to complete
+/// 'g.setColor(' on a line whose recommendation says to switch the
+/// color to Color.GRAY, it returned the color the call used before.
+/// The Automatable group's fenced blocks are AI agent prompts, not
+/// code, so the prompt forbids inserting them.
+///
 /// When the user configured a guideline in the IDE's settings, it is
 /// injected as standing instructions the completion must follow, so
 /// completions respect the same guidelines as analyses; see guideline.
@@ -626,12 +638,27 @@ pub fn completion_prompt(
         None => String::new(),
     };
 
-    // The analysis document of the file, when one exists. It is context
-    // only: the model must output insertion code, not restate it.
+    // The analysis document of the file, when one exists. Its
+    // recommendations take precedence over continuing the existing
+    // code: the prompt names the caret's line and tells the model to
+    // first look for a recommendation step whose Line N reference
+    // matches it and, when one exists, to complete with that step's
+    // code - the part of its snippet that follows the caret. Without
+    // that precedence the model treated the analysis as passive
+    // context and completed from the file's existing patterns: asked
+    // to complete 'g.setColor(' on a line whose recommendation says to
+    // switch the color to Color.GRAY, it returned the color the call
+    // used before. The Automatable group's fenced blocks are AI agent
+    // prompts, not code, so the prompt forbids inserting them; a step
+    // without a code snippet shapes the direction only.
     let analysis_section = match analysis {
         Some(analysis) => format!(
-            "A code reviewer analyzed this file; its analysis follows between the ANALYSIS lines. \
-Use it as context for what the code does and what changes are planned, so the completion fits the intended direction. \
+            "A code reviewer analyzed this file; its analysis follows between the ANALYSIS lines. The caret is on line {gutter_line}. \
+FIRST check the analysis's Recommendations section for a step whose 'Line N:' reference matches the caret's line (N = {gutter_line}) or the code at the caret. \
+When such a step exists, the completion MUST implement that step: output the part of the step's recommended code snippet that continues from the caret, so the completed code matches the recommendation. \
+This takes precedence over continuing the file's existing patterns: for example, when a step says the call on the caret's line should use Color.GRAY and the caret sits right after 'g.setColor(', the completion is 'Color.GRAY);' - not the color the call used before. \
+The 'Automatable' group's fenced blocks are AI agent prompts, not code: never insert them. \
+When no step targets the caret's line, use the analysis as context for what the code does and what changes are planned, so the completion fits the intended direction. \
 Do not restate or quote the analysis; output only insertion code.\n\n\
 === ANALYSIS ===\n{analysis}\n=== END ANALYSIS ===\n\n"
         ),
