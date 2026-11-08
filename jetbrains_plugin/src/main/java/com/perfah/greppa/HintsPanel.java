@@ -372,8 +372,8 @@ public class HintsPanel extends JPanel {
             placeholderLabel.setText(
                     "<html><center>" +
                     "No analysis yet.<br>" +
-                    "Open a file to generate its analysis.<br>" +
-                    "If none appears, check the AI service settings in<br>" +
+                    "Click 'Analyze' to initiate the Markdown generation.<br>" +
+                    "If none appears, check the plugin settings in<br>" +
                     "<b>Settings | Tools | Greppa</b>." +
                     "</center></html>"
             );
