@@ -364,12 +364,19 @@ visualize.* instead.\n"
     // the attached file in the analyzed code, or a reference to the
     // analyzed file in the attached file's content - and sorts every
     // attachment into the Depends on and Used by subsections
-    // accordingly. That is what makes the manual quick adds work: a
-    // file that imports the analyzed one, attached from the Imports
-    // pane, lands under Used by without any extra plumbing. The big
-    // picture subsection then contrasts those two literal per-file
-    // lists: flowing prose that makes sense of the analyzed file and
-    // the attached files as one whole - what they accomplish together,
+    // accordingly. A reference is any use of the other file's code,
+    // not only an explicit import: the model read "reference" as
+    // "import statement" and wrote *None.* under both subsections when
+    // the analyzed file used an attached file's class without importing
+    // it - which many languages allow, e.g. a Java class in the same
+    // or the default package - so the prompt spells out that calling,
+    // instantiating or simply naming something the other file defines
+    // counts. That is what makes the manual quick adds work: a file
+    // that uses the analyzed one, attached from the Imports pane,
+    // lands under Used by without any extra plumbing. The big picture
+    // subsection then contrasts those two literal per-file lists:
+    // flowing prose that makes sense of the analyzed file and the
+    // attached files as one whole - what they accomplish together,
     // not another inventory. Empty when the user disabled the section;
     // the attachments themselves stay in the prompt as context either
     // way: they inform every section, not only this one.
@@ -383,6 +390,9 @@ If no files are attached, write *No attached files.*\n\
 Otherwise, for EVERY attached file, determine the direction of the relationship from where the references are: \
 a reference to the attached file in the analyzed code means the analyzed file depends on it, \
 and a reference to the analyzed file in the attached file's content means the analyzed file is used by it. \
+A reference is any use of the other file's code, not only an explicit import: \
+calling, instantiating or simply naming a function, class, type, constant or module the other file defines counts as a reference, \
+because many languages allow using a file's code without importing it (e.g. a Java class in the same or the default package). \
 A file may relate in both directions; every attached file must appear in at least one of the two lists below, \
 each introduced by a ### subheading with exactly this text:\n\n\
 ### Depends on\n\
