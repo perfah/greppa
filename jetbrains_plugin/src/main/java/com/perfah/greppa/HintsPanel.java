@@ -357,12 +357,15 @@ public class HintsPanel extends JPanel {
      * interpretation yet" message afterwards. The setup steps used to
      * live in the plugin description; they are shown here instead, so
      * they reach the one person who needs them - someone whose setup is
-     * not working yet - without filling the Marketplace page. Once any
-     * analysis has rendered, the bundled server and the LLM service
-     * demonstrably work, so repeating the install steps would only be
-     * noise; the flag is persisted (see
-     * GreppaSettingsState.setupComplete), so the steps do not return
-     * after an IDE restart either. Called whenever the card is shown.
+     * not working yet - without filling the Marketplace page. The steps
+     * name the requirement - an OpenAI-compatible LLM service - and
+     * present Ollama with the gemma model only as the default example,
+     * so no service or model reads as required. Once any analysis has
+     * rendered, the bundled server and the LLM service demonstrably
+     * work, so repeating the install steps would only be noise; the
+     * flag is persisted (see GreppaSettingsState.setupComplete), so the
+     * steps do not return after an IDE restart either. Called whenever
+     * the card is shown.
      */
     private void updatePlaceholderText() {
         if (GreppaSettingsState.getInstance().setupComplete) {
@@ -379,10 +382,11 @@ public class HintsPanel extends JPanel {
         placeholderLabel.setText(
                 "<html><center>" +
                 "<b>First-time setup</b><br>" +
-                "1. Install Ollama (https://ollama.com) and pull the<br>" +
-                "default model: <code>ollama pull gemma4:31b-cloud</code><br>" +
+                "1. Install an OpenAI-compatible LLM service. The default<br>" +
+                "example is Ollama (https://ollama.com) with the model<br>" +
+                "<code>ollama pull gemma4:31b-cloud</code>.<br>" +
                 "2. Open a file - its interpretation appears in this window.<br><br>" +
-                "Any OpenAI-compatible service works too: set its base URL,<br>" +
+                "Any other service or model works too: set its base URL,<br>" +
                 "model and API key in <b>Settings | Tools | Greppa</b>.<br>" +
                 "The plugin bundles its own server, so there is<br>" +
                 "nothing else to install." +
