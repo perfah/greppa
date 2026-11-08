@@ -356,6 +356,18 @@ impl LanguageServer for Backend {
         *self.state.last_uri.lock().unwrap() = Some(uri.clone());
         log_message(&format!("Current file opened: {}", uri));
 
+        // Refresh on open disabled: only sync the document, like the
+        // auto-refresh-disabled branch of did_change below. No tick is
+        // scheduled, and the analysis currently streaming for another
+        // file is left running: cancelling it without a superseding
+        // tick would only discard the tokens it has already spent, and
+        // its finished document is stored for when the user returns
+        // to that file.
+        if !refresh_on_open() {
+            log_message("did_open: refresh on open disabled, only syncing the document");
+            return;
+        }
+
         // The analysis currently running is for a superseded file; abort it.
         cancel_running_tick(&self.state);
 
@@ -378,8 +390,10 @@ impl LanguageServer for Backend {
         // that must have changed since the last completed analysis before
         // typing triggers a new one. 0 disables the automatic refresh
         // while writing entirely: the document sync above still keeps the
-        // server's copy current, and opening a file, switching tabs and
-        // the reload button still re-analyze.
+        // server's copy current, and analyses are then generated only by
+        // the refresh triggers the IDE's settings enable (opening or
+        // switching files, saving) and the explicit ones (the Analyze
+        // button's forced tick, resuming a pause).
         let min_chars = auto_update_min_chars();
         if min_chars == 0 {
             log_message("did_change: auto-refresh disabled, only syncing the document");
@@ -724,13 +738,30 @@ fn cancel_running_tick(state: &ServerState) {
 /// 0 disables the automatic refresh while writing entirely. Configured
 /// in the IDE's settings and passed as the
 /// ANTIVIBER_AUTO_UPDATE_MIN_CHARS environment variable when the server
-/// is launched; the default of 50 matches the IDE setting's default and
-/// applies only when the variable is unset or invalid.
+/// is launched; the default of 0 matches the IDE setting's default -
+/// like every refresh trigger, the automatic refresh is off unless the
+/// user opts in - and applies only when the variable is unset or
+/// invalid.
 fn auto_update_min_chars() -> usize {
     std::env::var("ANTIVIBER_AUTO_UPDATE_MIN_CHARS")
         .ok()
         .and_then(|value| value.parse().ok())
-        .unwrap_or(50)
+        .unwrap_or(0)
+}
+
+/// Whether opening a file triggers its analysis: the did_open handler
+/// schedules a tick 500 ms after the open when this is on. Configured
+/// in the IDE's settings and passed as the ANTIVIBER_REFRESH_ON_OPEN
+/// environment variable when the server is launched; unset or any value
+/// other than "true" means off - the default, matching the IDE setting's
+/// default. Like every refresh trigger the open trigger is off unless
+/// the user opts in, so opening files spends no tokens on a fresh
+/// installation. The IDE's tab-selection listener, which also fires on
+/// file opens, is gated by the same setting on the IDE side.
+fn refresh_on_open() -> bool {
+    std::env::var("ANTIVIBER_REFRESH_ON_OPEN")
+        .map(|value| value == "true")
+        .unwrap_or(false)
 }
 
 /// Returns how many characters the two strings differ by: the size of the

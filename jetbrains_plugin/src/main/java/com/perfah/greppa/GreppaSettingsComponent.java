@@ -91,6 +91,14 @@ public class GreppaSettingsComponent {
      * rather than a labeled form row, because it is a single boolean.
      */
     private final JBCheckBox refreshOnSaveField = new JBCheckBox("Refresh analysis on save");
+    /**
+     * Toggles the open-triggered refresh (see
+     * GreppaSettingsState.refreshOnOpen): opening a file or switching
+     * editor tabs to it generates its analysis. A checkbox with its own
+     * label rather than a labeled form row, like the save-refresh
+     * toggle.
+     */
+    private final JBCheckBox refreshOnOpenField = new JBCheckBox("Refresh analysis on open");
     /** The section checkboxes by section key, built from SECTIONS in document order. */
     private final Map<String, JBCheckBox> sectionCheckBoxes = new LinkedHashMap<>();
 
@@ -121,8 +129,14 @@ public class GreppaSettingsComponent {
         autoUpdateMinCharsField.setToolTipText(
                 "Minimum number of characters that must have changed since the last analysis "
                         + "before typing triggers a new one. 0 disables the automatic refresh while typing; "
-                        + "opening a file, switching tabs and the Refresh button still re-analyze. "
+                        + "analyses then happen only through the other refresh settings or the Analyze button. "
                         + "Default: 0 (automatic refresh off).");
+
+        refreshOnOpenField.setToolTipText(
+                "When on, opening a file or switching editor tabs to it generates its analysis - also when the file content is unchanged, "
+                        + "e.g. after moving only the cursor, so the analysis reflects the current caret. "
+                        + "When off, no tokens are spent on opening or switching files. "
+                        + "Applies to tab switches immediately; the server's own on-open trigger takes effect after the IDE is restarted.");
 
         refreshOnSaveField.setToolTipText(
                 "When on, saving a file (Ctrl+S, Save All and the IDE's autosaves alike) re-generates its analysis. "
@@ -146,13 +160,19 @@ public class GreppaSettingsComponent {
         // mechanism ("the next time the server is started"). The
         // save-refresh toggle is the exception named in the note: the
         // IDE's save listeners read it when the save events fire (see
-        // GreppaProjectActivity), so it applies immediately. Rendered in
+        // GreppaProjectActivity), so it applies immediately. The
+        // open-refresh toggle straddles the two: the server's own
+        // on-open tick follows its environment variable (after the
+        // restart), while the IDE's tab-selection listener reads the
+        // setting when the selection changes (see
+        // LspTabSelectionListener), so that half applies immediately -
+        // which the note and the toggle's tooltip both say. Rendered in
         // the context-help color so it reads as a note, not as another
         // form label. The color is set through setForeground, not
         // JBLabel.setFontColor: in this IDE build setFontColor takes the
         // new UI's FontColor type, not a java.awt.Color.
         JBLabel restartNote = new JBLabel(
-                "The server settings take effect after the IDE is restarted; the save-refresh toggle applies immediately.");
+                "The server settings take effect after the IDE is restarted; the save-refresh toggle applies immediately, and so does the open-refresh toggle for tab switches.");
         restartNote.setForeground(UIUtil.getContextHelpForeground());
 
         // The section checkboxes grouped by the tool window tab that
@@ -172,6 +192,7 @@ public class GreppaSettingsComponent {
                 .addLabeledComponent("LLM API key:", llmApiKeyField, 1, false)
                 .addLabeledComponent("LLM guideline:", new JBScrollPane(guidelineField), 1, false)
                 .addLabeledComponent("Min. chars changed for auto-refresh:", autoUpdateMinCharsField, 1, false)
+                .addComponent(refreshOnOpenField)
                 .addComponent(refreshOnSaveField)
                 .addComponent(sectionsHeader)
                 .addComponent(sectionsPanel)
@@ -334,6 +355,16 @@ public class GreppaSettingsComponent {
     /** Sets the shown minimum number of changed chars for the auto-refresh. */
     public void setAutoUpdateMinChars(int minChars) {
         autoUpdateMinCharsField.setValue(minChars);
+    }
+
+    /** Returns whether the open-triggered refresh is on; see GreppaSettingsState.refreshOnOpen. */
+    public boolean isRefreshOnOpen() {
+        return refreshOnOpenField.isSelected();
+    }
+
+    /** Sets the shown open-refresh toggle. */
+    public void setRefreshOnOpen(boolean refreshOnOpen) {
+        refreshOnOpenField.setSelected(refreshOnOpen);
     }
 
     /** Returns whether the save-triggered refresh is on; see GreppaSettingsState.refreshOnSave. */

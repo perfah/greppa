@@ -74,8 +74,8 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * Minimum number of characters that must have changed since the last
      * completed analysis before writing triggers a new one; default value
      * 0 disables the automatic refresh while writing entirely (the document
-     * stays in sync, but only opening a file, switching tabs or the
-     * Refresh button re-analyze).
+     * stays in sync; opening, switching and saving then follow their own
+     * refresh settings, and the Analyze button always re-analyzes).
      */
     public int autoUpdateMinChars = 0;
 
@@ -87,10 +87,32 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * other settings this one is IDE-side: it is read when the save
      * happens, not passed to the LSP server as an environment variable,
      * so toggling it applies immediately without an IDE restart. Default
-     * on: the save-triggered refresh is the plugin's established
-     * behavior.
+     * off, like every refresh trigger: saving must not spend tokens
+     * unless the user opts in - with every refresh setting off, an
+     * analysis is generated only explicitly (the Analyze button,
+     * applying a focus, resuming a pause).
      */
-    public boolean refreshOnSave = true;
+    public boolean refreshOnSave = false;
+
+    /**
+     * Whether opening a file (or switching editor tabs to it) generates
+     * its analysis. One setting gates the two triggers that fire when a
+     * file becomes the selected editor, because gating either alone
+     * would leave every file open still spending tokens:
+     * - the LSP server's own on-open tick (did_open in main.rs), gated
+     *   through the ANTIVIBER_REFRESH_ON_OPEN environment variable this
+     *   setting is passed to the server as when it is launched (see
+     *   GreppaLspServerDescriptor.createCommandLine), so that half
+     *   takes effect the next time the server starts;
+     * - the IDE's tab-selection listener (LspTabSelectionListener),
+     *   which sends the custom/didSwitchFile notification on every
+     *   editor selection change - file opens included, because opening
+     *   a file selects it. The listener reads this setting when the
+     *   selection changes, so that half applies immediately.
+     * Default off, like every refresh trigger: opening or switching
+     * files must not spend tokens unless the user opts in.
+     */
+    public boolean refreshOnOpen = false;
 
     /**
      * Whether the tool window has displayed an analysis at least once,
