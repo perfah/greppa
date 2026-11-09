@@ -26,54 +26,94 @@
 # The build scripts need no signing configuration: the IntelliJ
 # Platform Gradle Plugin 2.x (see build.gradle.kts) registers a
 # signPlugin task per project whose certificate chain, private key and
-# password default to those environment variables. The task writes the
-# signed zip under the original buildPlugin name (greppa-<version>.zip)
-# and keeps its unsigned input alongside it as <name>-unsigned.zip.
-# The unsigned copy is a build intermediate nothing consumes - every
-# consumer (Marketplace upload, install from disk, release asset) takes
-# the signed zip - so the plugin jobs remove it before the upload and
-# the artifact paths below catch the signed zip only. A local
-# ./gradlew buildPlugin without the variables stays unsigned, which
-# only matters for Marketplace uploads, not for the runIde sandbox or
-# installing from disk.
+# password default to those environment variables. The task signs the
+# zip buildPlugin produced and writes the signed copy next to the
+# unsigned original as <name>-signed.zip - nothing is ever named
+# <name>-unsigned.zip, which is why an earlier "rm *unsigned*" cleanup
+# step matched nothing and the artifact ended up holding both zips. The
+# signed zip carries the unsigned zip's entries plus the signature
+# entry, and the signature is a set of digests over those entries, not
+# over the zip's bytes.
 #
-# The signature lives in the zip file itself, so the exact zip
-# signPlugin produces is what gets uploaded and released: the previous
-# flow extracted the plugin folder from the zip and the release job
-# re-zipped it, and an extracted-and-repacked zip is unsigned. The
-# build artifacts are therefore the signed zips themselves - a download
-# is GitHub's wrapper zip holding the signed plugin zip, so installing
-# from an artifact download takes one extraction - and the release
-# assets are the signed zips renamed to their versioned names.
+# The artifact is the unpacked SIGNED zip, not the zip file: GitHub's
+# artifact download button always wraps whatever the artifact contains
+# in a zip of GitHub's own making - no workflow setting can change
+# that - and with the unpacked zip as the content that wrapper IS a
+# plugin zip: the plugin folder at the zip root plus the signature
+# entry, exactly the entries of the zip signPlugin produced. The
+# download is therefore ONE zip layer, installable via
+# Settings | Plugins | Install Plugin from Disk, and it carries the
+# signature: the wrapper is a repack, and a repack of identical
+# entries keeps the signature valid, because its digests are computed
+# over the entries - their names and content - rather than the zip's
+# bytes. Uploading the signed zip FILE as the artifact instead (an
+# earlier attempt) made the download a zip holding the plugin zip:
+# two layers to unpack before anything installed. The Marketplace
+# verifies the signature when a zip is uploaded, so uploading the
+# downloaded zip by hand is the end-to-end check that the signature
+# survived.
+#
+# The plugin folder inside the artifact is NOT renamed: the IDEA zip's
+# folder is named "idea" after the Gradle project that built it (the
+# RustRover zip's is "greppa", the root project's name), and the
+# signature's digests are keyed by entry name - renaming the folder
+# after signing would leave the digests pointing at names that no
+# longer exist, invalidating the signature. The IDE's installer and
+# the Marketplace read the plugin's identity from plugin.xml, not
+# from the folder name, so "idea" is cosmetic only.
 #
 # One consequence is handled in the plugin jobs: artifact downloads do
 # not preserve file permissions, so the bundled macOS/Linux server
-# binaries lose their executable bit when the server artifacts are
-# downloaded. The bit is restored right after the download, before the
-# Gradle build, so it is set inside the zip Gradle builds (Gradle's zip
-# tasks preserve Unix permissions) and survives every later round-trip
-# untouched - the zip is never unpacked again. The plugin also restores
+# binaries lose their executable bit on the way into the artifact and
+# the downloaded zip carries them without the bit. The plugin restores
 # the bit before launching the binary (see
-# GreppaLspServerDescriptor.createCommandLine).
+# GreppaLspServerDescriptor.createCommandLine), so the install works
+# regardless. The bit is restored right after the server artifacts are
+# downloaded, before the Gradle build, so the zips Gradle builds carry
+# it set in the first place (Gradle's zip tasks preserve Unix
+# permissions) - the publish job's Marketplace zip keeps it that way.
+# The plugin jobs also verify the artifact after the upload (see the
+# verification steps): a wrong upload path fails the build with the
+# actual artifact content in the log instead of shipping a zip that
+# fails in the IDE.
 #
-# The release assets are named greppa-<version>-rustrover.zip /
+# The release assets are the same entries re-zipped under versioned
+# names: the release job must produce single files and it only has the
+# artifacts, and a re-zip of identical entries keeps the signature
+# covered the same way (see above). Release assets download raw,
+# without GitHub's artifact wrapper, so each asset is the plugin zip
+# itself. The assets are named greppa-<version>-rustrover.zip /
 # greppa-<version>-intellij.zip; the version comes from the tag
 # (v1.0.0 -> 1.0.0), so version tags are expected to match the plugin
 # version in plugin.xml.
 #
 # The publish job uploads the plugin to the JetBrains Marketplace, for
 # version tags only like the GitHub release, through the IntelliJ
-# Platform Gradle Plugin's publishPlugin task - one per target,
-# mirroring the build jobs: :publishPlugin publishes the RustRover zip
-# and :idea:publishPlugin the IntelliJ IDEA zip. The task reads the
-# Marketplace personal access token from the intellijPlatformPublishingToken
-# project property, which the job provides through its environment
-# variable spelling (ORG_GRADLE_PROJECT_intellijPlatformPublishingToken)
-# from the PUBLISHING_TOKEN repository secret - like the signing
-# material, the token never appears in the repository or the command
-# line. The job rebuilds the zips it uploads: publishPlugin builds,
-# signs and uploads its own distribution, so it stages the server
-# binaries and passes the signing secrets like the plugin jobs.
+# Platform Gradle Plugin's publishPlugin task. Only the idea
+# subproject's :idea:publishPlugin runs - the IntelliJ IDEA target is
+# the primary, published one - and never together with the root
+# project's :publishPlugin: the two targets differ only in which IDE
+# distribution they compile against (the subproject builds the root's
+# own sources; see idea/build.gradle.kts), so both zips carry the same
+# plugin.xml - the same plugin id, version and default channel - and
+# the Marketplace keeps one update per version and channel, so a
+# second upload would be rejected as a duplicate version with the
+# first zip already live. One upload also serves every IDE: the
+# Marketplace has no per-IDE publishing - which IDEs can install the
+# plugin comes from plugin.xml's since-build and depends entries,
+# which both zips share - and the plugin depends only on the platform
+# module and the bundled Markdown plugin, so the uploaded zip installs
+# in IntelliJ IDEA and RustRover alike. The RustRover zip remains a
+# GitHub release asset (the release job below), where the per-target
+# zips are the point. The task reads the Marketplace personal access
+# token from the intellijPlatformPublishingToken project property,
+# which the job provides through its environment variable spelling
+# (ORG_GRADLE_PROJECT_intellijPlatformPublishingToken) from the
+# PUBLISHING_TOKEN repository secret - like the signing material, the
+# token never appears in the repository or the command line. The job
+# rebuilds the zip it uploads: publishPlugin builds, signs and uploads
+# its own distribution, so it stages the server binaries and passes
+# the signing secrets like the plugin jobs.
 name: Build
 
 on:
@@ -143,9 +183,8 @@ jobs:
       # project's zip (the RustRover target); the IntelliJ IDEA zip is
       # built by the plugin-intellij job. signPlugin then signs that
       # zip, reading the signing material from the environment, and
-      # leaves two zips in the distributions directory: the signed one
-      # under the original name and its unsigned input as
-      # <name>-unsigned.zip (see the workflow header comment). chmod
+      # writes the signed copy next to the unsigned original as
+      # <name>-signed.zip (see the workflow header comment). chmod
       # guards against the wrapper's executable bit being lost when
       # the scripts were committed from Windows.
       - name: Build and sign plugin zip
@@ -157,27 +196,49 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :buildPlugin :signPlugin
-      # signPlugin keeps its unsigned input zip next to the signed one
-      # (its name contains "unsigned"); nothing consumes it - every
-      # consumer takes the signed zip (see the workflow header comment)
-      # - so remove it here. The upload path below then catches the
-      # signed zip only, and the release job's rename gets exactly one
-      # zip per artifact. rm -f keeps the step green should a future
-      # plugin version stop producing the unsigned copy.
-      - name: Remove unsigned plugin zip
-        run: rm -f jetbrains_plugin/build/distributions/*unsigned*.zip
-      # The signed zip itself is the artifact: the signature lives in
-      # the zip file, so the exact zip signPlugin produced must be what
-      # is uploaded and released - extracting the plugin folder and
-      # re-zipping it (the previous flow) yields an unsigned zip. With
-      # the unsigned copy removed above, the glob catches the signed
-      # zip only. A download is therefore GitHub's wrapper zip holding
-      # the signed plugin zip; installing from an artifact download
-      # takes one extraction.
+      # Unpack the SIGNED zip - not the unsigned original - so the
+      # signature entry travels into the artifact with the plugin
+      # folder: the artifact must hold the entries of the signed zip
+      # (see the workflow header comment). ls *-signed.zip picks the
+      # signed copy and fails the job when signPlugin produced none
+      # (e.g. the signing secrets are missing), so an unsigned zip is
+      # never silently shipped; the unsigned original stays on the
+      # runner. The plugin folder keeps its build name ("greppa" here,
+      # the Gradle project's name) - see the intellij job's unpack step
+      # for why no rename may happen after signing.
+      - name: Unpack signed plugin zip
+        run: |
+          cd jetbrains_plugin/build/distributions
+          signed_zip=$(ls *-signed.zip)
+          unzip -o -q "$signed_zip" -d unpacked
+      # The artifact: the unpack directory is the upload path, so the
+      # artifact root holds the unpacked entries - the plugin folder
+      # (greppa/lib, greppa/bin) plus the signature entry - and
+      # GitHub's download wrapper zips exactly those entries: the
+      # download IS the signed plugin zip, one layer (see the workflow
+      # header comment). Uploading the signed zip FILE instead would
+      # make the download a zip holding the plugin zip: two layers.
       - uses: actions/upload-artifact@v4
         with:
           name: greppa-rustrover
-          path: jetbrains_plugin/build/distributions/*.zip
+          path: jetbrains_plugin/build/distributions/unpacked
+      # Verify what the artifact actually holds, by downloading it
+      # back: the artifact's content is exactly what GitHub's download
+      # button wraps, so asserting the layout here asserts what the
+      # IDE will see. The plugin folder must sit at the artifact's
+      # root; the ls line prints the actual root content, so a wrong
+      # upload path fails the build with the real layout in the log
+      # instead of shipping a zip that fails in the IDE.
+      - name: Download the uploaded artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: greppa-rustrover
+          path: artifact-check
+      - name: Verify the plugin folder sits at the artifact root
+        run: |
+          ls artifact-check
+          test -d artifact-check/greppa/lib || { echo "artifact root does not hold greppa/lib"; exit 1; }
+          test -d artifact-check/greppa/bin || { echo "artifact root does not hold greppa/bin"; exit 1; }
 
   plugin-intellij:
     name: Plugin (IntelliJ IDEA)
@@ -206,9 +267,8 @@ jobs:
       # subproject's zip (the IntelliJ IDEA target); the RustRover zip
       # is built by the plugin-rustrover job. signPlugin then signs
       # that zip, reading the signing material from the environment,
-      # and leaves two zips in the distributions directory: the signed
-      # one under the original name and its unsigned input as
-      # <name>-unsigned.zip (see the workflow header comment). chmod
+      # and writes the signed copy next to the unsigned original as
+      # <name>-signed.zip (see the workflow header comment). chmod
       # guards against the wrapper's executable bit being lost when
       # the scripts were committed from Windows.
       - name: Build and sign plugin zip
@@ -220,19 +280,53 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :idea:buildPlugin :idea:signPlugin
-      # signPlugin keeps its unsigned input zip next to the signed one;
-      # nothing consumes it, so remove it here - see the rustrover
-      # job's removal step for the reasoning. rm -f keeps the step
-      # green should a future plugin version stop producing the
-      # unsigned copy.
-      - name: Remove unsigned plugin zip
-        run: rm -f jetbrains_plugin/idea/build/distributions/*unsigned*.zip
-      # The signed zip itself is the artifact; see the rustrover job's
-      # upload step for why the zip must not be unpacked.
+      # The same unpack as the rustrover job's step, from this
+      # subproject's signed zip. The plugin folder inside it is named
+      # "idea" after the Gradle project that built it, and it is
+      # deliberately NOT renamed to the plugin's own name: the
+      # signature's digests are keyed by entry name, so renaming the
+      # folder after signing would invalidate the signature (see the
+      # workflow header comment). The IDE's installer and the
+      # Marketplace read the plugin's identity from plugin.xml, not
+      # from the folder name, so "idea" is cosmetic only. ls
+      # *-signed.zip fails the job when signPlugin produced no signed
+      # copy, so an unsigned zip is never silently shipped; the
+      # unsigned original stays on the runner.
+      - name: Unpack signed plugin zip
+        run: |
+          cd jetbrains_plugin/idea/build/distributions
+          signed_zip=$(ls *-signed.zip)
+          unzip -o -q "$signed_zip" -d unpacked
+      # The artifact: the unpack directory is the upload path, so the
+      # artifact root holds the unpacked entries - the plugin folder
+      # (idea/lib, idea/bin) plus the signature entry - and GitHub's
+      # download wrapper zips exactly those entries: the download IS
+      # the signed plugin zip, one layer (see the workflow header
+      # comment). This is the zip a manual Marketplace upload takes:
+      # the initial plugin listing is created by uploading it by hand
+      # at plugins.jetbrains.com, before the publish job takes over
+      # for later versions.
       - uses: actions/upload-artifact@v4
         with:
           name: greppa-intellij
-          path: jetbrains_plugin/idea/build/distributions/*.zip
+          path: jetbrains_plugin/idea/build/distributions/unpacked
+      # Verify what the artifact actually holds, by downloading it
+      # back: the artifact's content is exactly what GitHub's download
+      # button wraps, so asserting the layout here asserts what the
+      # IDE will see. The plugin folder must sit at the artifact's
+      # root; the ls line prints the actual root content, so a wrong
+      # upload path fails the build with the real layout in the log
+      # instead of shipping a zip that fails in the IDE.
+      - name: Download the uploaded artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: greppa-intellij
+          path: artifact-check
+      - name: Verify the plugin folder sits at the artifact root
+        run: |
+          ls artifact-check
+          test -d artifact-check/idea/lib || { echo "artifact root does not hold idea/lib"; exit 1; }
+          test -d artifact-check/idea/bin || { echo "artifact root does not hold idea/bin"; exit 1; }
 
   publish:
     name: Publish to JetBrains Marketplace
@@ -248,7 +342,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # All three platform binaries, merged into the staging directory
-      # the Gradle build bundles from; publishPlugin builds the zips it
+      # the Gradle build bundles from; publishPlugin builds the zip it
       # uploads, so it needs the bundled server binaries like the
       # plugin jobs.
       - uses: actions/download-artifact@v4
@@ -258,7 +352,7 @@ jobs:
           path: lsp_server/bin
       # Restore the executable bit the artifact download lost (see the
       # workflow header comment), so the bundled macOS/Linux server
-      # binaries are executable inside the zips publishPlugin builds.
+      # binaries are executable inside the zip publishPlugin builds.
       - name: Restore server binary permissions
         run: chmod +x lsp_server/bin/lsp_server-*
       - uses: actions/setup-java@v4
@@ -266,19 +360,19 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: gradle/actions/setup-gradle@v4
-      # One publishPlugin task per target, mirroring the plugin jobs'
-      # build tasks: the root project's task publishes the RustRover
-      # zip, the idea subproject's task the IntelliJ IDEA zip. The
-      # token reaches Gradle as the intellijPlatformPublishingToken
-      # project property through its ORG_GRADLE_PROJECT_ environment
-      # variable spelling, from the PUBLISHING_TOKEN repository
-      # secret; the signing material is passed too, because
-      # publishPlugin signs the zip it uploads. Both targets share the
-      # plugin id and version, so the two uploads land on the same
-      # Marketplace plugin. chmod guards against the wrapper's
-      # executable bit being lost when the scripts were committed from
-      # Windows.
-      - name: Publish plugin zips
+      # Only the idea subproject's publishPlugin task runs - the
+      # IntelliJ IDEA target is the primary, published one - and never
+      # together with the root project's task: both targets share the
+      # plugin id, version and channel, and the Marketplace rejects a
+      # second upload of the same version as a duplicate (see the
+      # workflow header comment). The token reaches Gradle as the
+      # intellijPlatformPublishingToken project property through its
+      # ORG_GRADLE_PROJECT_ environment variable spelling, from the
+      # PUBLISHING_TOKEN repository secret; the signing material is
+      # passed too, because publishPlugin signs the zip it uploads.
+      # chmod guards against the wrapper's executable bit being lost
+      # when the scripts were committed from Windows.
+      - name: Publish plugin zip
         working-directory: jetbrains_plugin
         env:
           ORG_GRADLE_PROJECT_intellijPlatformPublishingToken: ${{ secrets.PUBLISHING_TOKEN }}
@@ -287,7 +381,7 @@ jobs:
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew :publishPlugin :idea:publishPlugin
+          ./gradlew :idea:publishPlugin
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -297,27 +391,31 @@ jobs:
       contents: write
     steps:
       # Both per-target artifacts (greppa-rustrover, greppa-intellij),
-      # each into its own subdirectory: the two signed zips can carry
-      # the same file name from their Gradle projects, which a merged
-      # download would overwrite.
+      # each into its own subdirectory: each holds the unpacked entries
+      # of its signed zip, and a merged download would let same-named
+      # entries (the signature entry, for instance) overwrite each
+      # other.
       - uses: actions/download-artifact@v4
         with:
           pattern: greppa-*
           path: dist
-      # The release assets are the signed zips the plugin jobs built,
-      # renamed to their versioned names - not re-zipped, which would
-      # strip the signature (see the workflow header comment). Each
-      # artifact holds exactly one zip - the plugin jobs removed the
-      # unsigned copies - so each glob matches a single file and the
-      # rename cannot collide. The version comes from the tag
-      # (v1.0.0 -> 1.0.0): the release only runs for version tags,
-      # which are expected to match the plugin version in plugin.xml.
+      # The release assets must be single files, so each artifact's
+      # entries are re-zipped under the versioned asset name. The
+      # re-zip packs the identical entries the signed zip carried, so
+      # the signature covers the asset the same way it covers the
+      # artifact download (see the workflow header comment); release
+      # assets download raw, without GitHub's artifact wrapper, so
+      # each asset is the plugin zip itself. The version comes from
+      # the tag (v1.0.0 -> 1.0.0): the release only runs for version
+      # tags, which are expected to match the plugin version in
+      # plugin.xml.
       - name: Stage release assets
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
-          mv dist/greppa-rustrover/*.zip "dist/greppa-$version-rustrover.zip"
-          mv dist/greppa-intellij/*.zip "dist/greppa-$version-intellij.zip"
+          cd dist
+          (cd greppa-rustrover && zip -r -q "../greppa-$version-rustrover.zip" *)
+          (cd greppa-intellij && zip -r -q "../greppa-$version-intellij.zip" *)
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
