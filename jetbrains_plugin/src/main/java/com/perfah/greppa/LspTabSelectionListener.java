@@ -25,6 +25,14 @@ import org.jetbrains.annotations.NotNull;
  * the analysis can mark the segment containing the cursor with
  * "(current)", and the current topic/goal from HintsService, so the
  * analysis of the newly selected file is viewed through it.
+ *
+ * The listener is gated by the "refresh on open" setting (see
+ * GreppaSettingsState.refreshOnOpen): opening a file selects it, so this
+ * listener also fires on file opens, and both triggers follow that one
+ * toggle. The setting is read when the selection changes, so toggling it
+ * applies to tab switches immediately. When it is off, no trigger file is
+ * written and switching or opening files spends no LLM tokens; the
+ * Analyze button remains the explicit trigger.
  */
 public class LspTabSelectionListener implements FileEditorManagerListener {
 
@@ -34,6 +42,18 @@ public class LspTabSelectionListener implements FileEditorManagerListener {
     public void selectionChanged(@NotNull FileEditorManagerEvent event) {
         VirtualFile newFile = event.getNewFile();
         if (newFile == null) {
+            return;
+        }
+
+        // Opening a file selects it, so this listener also fires on file
+        // opens; both are the "refresh on open" trigger and are gated by
+        // the same setting (see GreppaSettingsState.refreshOnOpen). Read
+        // at event time, so toggling the setting applies to tab switches
+        // immediately. When off, no trigger file is written and switching
+        // or opening files spends no tokens; the Analyze button remains
+        // the explicit trigger.
+        if (!GreppaSettingsState.getInstance().refreshOnOpen) {
+            LOG.info("LspTabSelectionListener: refresh on open disabled, not requesting an analysis of " + newFile.getUrl());
             return;
         }
 
