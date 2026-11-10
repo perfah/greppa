@@ -1,8 +1,8 @@
 plugins {
     id("java")
-    // The same build tool as the root project, resolved the same way;
-    // see the root build.gradle.kts for the version rationale. Keep the
-    // two version strings in sync.
+    // The same build tool as the rustrover subproject, resolved the
+    // same way; see rustrover/build.gradle.kts for the version
+    // rationale. Keep the two version strings in sync.
     id("org.jetbrains.intellij.platform") version "2.+"
 }
 
@@ -25,7 +25,7 @@ java {
 
 // The plugin code is identical for both build targets; only the IDE it
 // is compiled against differs. This subproject therefore compiles the
-// root project's sources instead of keeping a copy: without this,
+// shared sources in ../src instead of keeping a copy: without this,
 // Gradle would look for sources under idea/src, which does not exist.
 sourceSets {
     main {
@@ -49,8 +49,9 @@ dependencies {
         // are edition-specific: intellijIdeaUltimate is the edition
         // JetBrains calls plain "IntelliJ IDEA"; for IDEA Community use
         // intellijIdeaCommunity instead, which carries the LSP API the
-        // plugin registers its server under as well. The root project
-        // targets RustRover; the sources and plugin.xml are shared.
+        // plugin registers its server under as well. The rustrover
+        // subproject targets RustRover; the sources and plugin.xml are
+        // shared.
         intellijIdeaUltimate("2026.2.4")
         // The bundled Markdown plugin's classes (org.intellij.markdown),
         // which MarkdownParser renders the analysis with; mirrors the
@@ -59,8 +60,8 @@ dependencies {
         bundledPlugin("org.intellij.plugins.markdown")
     }
 
-    // The same library dependencies as the root project; see the
-    // comments there for the rationale.
+    // The same library dependencies as the rustrover subproject; see
+    // the comments there for the rationale.
     implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.21.0") {
         exclude(group = "com.google.code.gson", module = "gson")
     }
@@ -70,9 +71,9 @@ dependencies {
     compileOnly("org.jetbrains:annotations:24.0.0")
 }
 
-// The same Rust server binary bundling as the root project; see the
-// comments there for the rationale, the staging directory and the
-// platform-specific binary names.
+// The same Rust server binary bundling as the rustrover subproject;
+// see the comments there for the rationale, the staging directory and
+// the platform-specific binary names.
 val serverBinariesDir = rootProject.file("../lsp_server/bin")
 
 tasks {
@@ -89,10 +90,11 @@ tasks {
             }
         }
         from(serverBinariesDir) {
-            // See the root build.gradle.kts: the copy root is the sandbox
-            // root, not the plugin directory, so the binaries must go to
-            // <pluginName>/bin to land inside the plugin folder - which
-            // is named "idea" in this subproject, not "greppa".
+            // See the rustrover subproject's build.gradle.kts: the copy
+            // root is the sandbox root, not the plugin directory, so
+            // the binaries must go to <pluginName>/bin to land inside
+            // the plugin folder - which is named "idea" in this
+            // subproject, not "rustrover".
             into(pluginName.get() + "/bin")
         }
     }

@@ -29,7 +29,8 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
     /**
      * Directory inside the plugin installation that holds the bundled
      * server binaries, one per platform; the Gradle build puts them
-     * there (see the prepareSandbox block in build.gradle.kts).
+     * there (see the prepareSandbox blocks in rustrover/build.gradle.kts
+     * and idea/build.gradle.kts).
      */
     private static final String BUNDLED_SERVER_DIR = "bin";
 
@@ -48,8 +49,9 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         // distribution - there is no server path setting, so a fresh
         // install is zero-setup. A custom server build is tested by
         // staging it in lsp_server/bin and running the plugin from a
-        // Gradle sandbox (see the prepareSandbox block in
-        // build.gradle.kts), not by pointing a setting at it.
+        // Gradle sandbox (see the prepareSandbox blocks in
+        // rustrover/build.gradle.kts and idea/build.gradle.kts), not by
+        // pointing a setting at it.
         File serverFile = bundledServerFile();
         if (serverFile == null) {
             String message = "No Greppa server available: the plugin installation contains no bundled server binary for this platform. "
@@ -160,8 +162,9 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
      * the platform the IDE runs on (bin/ inside the plugin's installation
      * directory), or null when the plugin cannot be resolved or the
      * platform's binary is absent - e.g. a distribution built without it
-     * (see the prepareSandbox block in build.gradle.kts), or an Intel
-     * Mac, whose platform is not bundled (see bundledBinaryName).
+     * (see the prepareSandbox blocks in rustrover/build.gradle.kts and
+     * idea/build.gradle.kts), or an Intel Mac, whose platform is not
+     * bundled (see bundledBinaryName).
      */
     @Nullable
     private static File bundledServerFile() {
