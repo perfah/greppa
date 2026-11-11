@@ -8,7 +8,7 @@ plugins {
 
 group = "com.perfah"
 // Keep in sync with the <version> in plugin.xml.
-version = "1.0.0"
+version = "1.0.1"
 
 java {
     toolchain {
