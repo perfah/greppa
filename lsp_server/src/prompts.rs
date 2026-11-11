@@ -23,8 +23,8 @@ fn guideline() -> Option<String> {
 /// document; the disabled sections' keys are passed as the
 /// ANTIVIBER_DISABLED_SECTIONS environment variable (comma-separated)
 /// when the LSP server is launched. Unset or empty means every section
-/// is enabled - the default, and the state of plugin builds without
-/// the section settings; unknown keys are ignored.
+/// is enabled - the default, and the state of plugin builds without the
+/// section settings; unknown keys are ignored.
 ///
 /// Resolved here, where the prompt is built, like the guideline: a
 /// single consumer, no plumbing through the tick listener. The
@@ -63,7 +63,7 @@ fn section_enabled(key: &str) -> bool {
 ///     one whole)
 ///   ## Parts (the file split into line-range segments)
 ///   ## Suggested direction (the next steps on a high conceptual level)
-///   ## Problems (Compilation and Logical subsections)
+///   ## Problems (Syntax and Logical subsections)
 ///   ## Recommendations (steps covering every problem and the direction)
 ///
 /// Each section is built as its own variable in the function body so it
@@ -98,9 +98,9 @@ fn section_enabled(key: &str) -> bool {
 /// injected right after the topic as standing instructions the model must
 /// follow throughout the document; see guideline.
 ///
-/// When `errors` is non-empty it holds the compilation/syntax errors the
-/// IDE's code analyzer reports for the file (the red highlights the
-/// editor shows). They are injected as a list the model must report in
+/// When `errors` is non-empty it holds the syntax errors the IDE's
+/// parser reports for the file (the parse errors the editor shows as red
+/// highlights). They are injected as a list the model must report in
 /// the Problems section, so the document lists what the IDE actually
 /// flags instead of only what the model re-derives from reading the
 /// code. Empty means the IDE reports no errors, and the prompt is
@@ -252,12 +252,11 @@ When the code contains no questions, omit this section entirely, heading include
         None => String::new(),
     };
 
-    // The compilation/syntax errors the IDE's code analyzer reports for
-    // the file, when there are any. The prompt requires the model to
-    // list every one of them in the Problems section, quoting the
-    // messages faithfully, so the document reports what the IDE actually
-    // flags. Empty means the IDE reports no errors, and no errors block
-    // is injected.
+    // The syntax errors the IDE's parser reports for the file, when
+    // there are any. The prompt requires the model to list every one of
+    // them in the Problems section, quoting the messages faithfully, so
+    // the document reports what the IDE actually flags. Empty means the
+    // IDE reports no errors, and no errors block is injected.
     let errors_section = if errors.is_empty() {
         String::new()
     } else {
@@ -267,7 +266,7 @@ When the code contains no questions, omit this section entirely, heading include
             .collect::<Vec<_>>()
             .join("\n");
         format!(
-            "The IDE's code analyzer currently reports the following compilation/syntax errors in the file:\n{error_list}\n\
+            "The IDE's parser currently reports the following syntax errors in the file:\n{error_list}\n\
 Every one of these errors should appear as bullets that starts with the error's line number, \
 in addition to the problems you find yourself. Quote the error messages faithfully and never claim the file has no \
 problems while these errors exist. \n\n"
@@ -489,10 +488,11 @@ What do you suggest the user does next on a high conceptual high level in order 
         ""
     };
 
-    // The Problems section: the compilation errors the IDE reports and
-    // the logical problems the model finds, as two subsections. Empty
-    // when the user disabled the section - the IDE-reported errors then
-    // simply go unlisted, like every other content of the section.
+    // The Problems section: the syntax errors the IDE's parser reports
+    // and the logical problems the model finds, as two subsections.
+    // Empty when the user disabled the section - the IDE-reported
+    // errors then simply go unlisted, like every other content of the
+    // section.
     let problems_section = if !problems_enabled {
         String::new()
     } else {
@@ -503,7 +503,7 @@ Start EVERY bullet with the exact line number of the first line of the code it c
 Never use a line range in this section and never invent a line number: copy it from the prefixes of the code below. \
 A problem that concerns the whole file uses Line 1.\n\
 If there are no problems, write *No problems found.*\n\n\
-### Compilation\n\n\
+### Syntax\n\n\
 {errors_section}\n\n\
 ### Logical\n\n\
 {logical_topic_note}List the logical problems you see in the file as a whole, not per segment, one bullet per problem, explained properly. \
@@ -529,13 +529,13 @@ For example: If they write 'I want to implement a peer-to-peer network using rus
             (true, true) => (
                 "Describe the suggested approaches for solving the problems listed in the Problems section and for advancing the Suggested direction above.",
                 "Every step must either resolve one of the listed problems or work towards the Suggested direction; never suggest steps that pull in a different direction than the Suggested direction. \
-The steps must cover both of them: EVERY problem listed in the Problems section - in both the Compilation and the Logical subsection - must be resolved by at least one step, and at least one step must work towards the Suggested direction. \
+The steps must cover both of them: EVERY problem listed in the Problems section - in both the Syntax and the Logical subsection - must be resolved by at least one step, and at least one step must work towards the Suggested direction. \
 Before writing the steps, count the problems you listed in the Problems section, and verify afterwards that every single one of them is resolved by a step: one problem without a step makes the whole review incomplete.",
             ),
             (true, false) => (
                 "Describe the suggested approaches for solving the problems listed in the Problems section.",
                 "Every step must resolve one of the listed problems. \
-The steps must cover them: EVERY problem listed in the Problems section - in both the Compilation and the Logical subsection - must be resolved by at least one step. \
+The steps must cover them: EVERY problem listed in the Problems section - in both the Syntax and the Logical subsection - must be resolved by at least one step. \
 Before writing the steps, count the problems you listed in the Problems section, and verify afterwards that every single one of them is resolved by a step: one problem without a step makes the whole review incomplete.",
             ),
             (false, true) => (

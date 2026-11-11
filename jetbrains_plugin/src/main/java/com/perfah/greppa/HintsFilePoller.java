@@ -1,8 +1,5 @@
 package com.perfah.greppa;
 
-import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl;
-import com.intellij.codeInsight.daemon.impl.HighlightInfo;
-import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
@@ -13,6 +10,10 @@ import com.intellij.openapi.project.ProjectLocator;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.psi.PsiErrorElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiManager;
+import com.intellij.psi.util.PsiTreeUtil;
 import org.eclipse.lsp4j.Position;
 
 import java.io.IOException;
@@ -316,10 +317,9 @@ public class HintsFilePoller implements Runnable {
      * deletes the file, and runs the tick. The write is atomic (tmp+rename)
      * so the server never reads a partially-written file.
      *
-     * The errors are the compilation/syntax errors the IDE's code analyzer
-     * currently reports for the file (see collectErrorsJson); the server
-     * remembers them per file and its analysis prompt lists them in the
-     * Problems section.
+     * The errors are the syntax errors the IDE's parser currently reports
+     * for the file (see collectErrorsJson); the server remembers them per
+     * file and its analysis prompt lists them in the Problems section.
      *
      * The attachments are the files checked in the Imports pane (see
      * attachmentsJson): their content is inlined here because the server
@@ -415,13 +415,25 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Collects the compilation/syntax errors the IDE's code analyzer
-     * currently reports for the file - the same red highlights the editor
-     * and the Problems view show - and returns them as a JSON array
-     * string: [{"line":N,"message":"..."}, ...] with 1-based line numbers
-     * matching the editor gutter. Returns "[]" when the file, its project
-     * or its document cannot be resolved, or when the analyzer reports no
-     * errors.
+     * Collects the syntax errors the IDE's parser currently reports for
+     * the file and returns them as a JSON array string:
+     * [{"line":N,"message":"..."}, ...] with 1-based line numbers
+     * matching the editor gutter, in document order. Returns "[]" when
+     * the file, its project, its document or its PSI tree cannot be
+     * resolved, or when the parser reports no errors.
+     *
+     * The errors are the file's PSI error elements
+     * (com.intellij.psi.PsiErrorElement) - the parser's own error
+     * reports, and public API. The previous implementation read the code
+     * analyzer's error highlights through
+     * DaemonCodeAnalyzerImpl.getHighlights, which also covered the
+     * semantic errors the analyzer derives (unresolved references, type
+     * errors) and the external compiler errors it relays (e.g. cargo
+     * check), but DaemonCodeAnalyzerImpl is internal API - the plugin
+     * verifier flags it - and the platform exposes no public API for
+     * the analyzer's highlights, so those error kinds are no longer
+     * reported and the analysis prompt's Problems section relies on the
+     * model finding them itself.
      *
      * The errors are collected here, where the trigger file is written,
      * because the trigger file is the only working channel from the IDE to
@@ -448,20 +460,30 @@ public class HintsFilePoller implements Runnable {
                 if (document == null) {
                     return "[]";
                 }
-                // getHighlights expects the severity filter as its second
-                // parameter, before the project.
-                List<HighlightInfo> highlights =
-                        DaemonCodeAnalyzerImpl.getHighlights(document, HighlightSeverity.ERROR, project);
+                PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
+                if (psiFile == null) {
+                    return "[]";
+                }
+                List<PsiErrorElement> errorElements =
+                        new ArrayList<>(PsiTreeUtil.findChildrenOfType(psiFile, PsiErrorElement.class));
+                // In document order, so the analysis lists the errors top
+                // down like the editor gutter does; findChildrenOfType
+                // promises no order.
+                errorElements.sort(Comparator.comparingInt(PsiErrorElement::getTextOffset));
                 StringBuilder json = new StringBuilder("[");
-                for (HighlightInfo info : highlights) {
-                    String message = info.getDescription();
-                    if (message == null) {
+                for (PsiErrorElement error : errorElements) {
+                    String message = error.getErrorDescription();
+                    int offset = error.getTextOffset();
+                    // A stale PSI tree (the document changed after the last
+                    // commit) can hold offsets outside the document; one
+                    // such element must not drop the rest of the list.
+                    if (message == null || offset < 0 || offset > document.getTextLength()) {
                         continue;
                     }
                     if (json.length() > 1) {
                         json.append(',');
                     }
-                    json.append("{\"line\":").append(document.getLineNumber(info.getStartOffset()) + 1)
+                    json.append("{\"line\":").append(document.getLineNumber(offset) + 1)
                             .append(",\"message\":").append(jsonQuote(message))
                             .append('}');
                 }
@@ -469,7 +491,7 @@ public class HintsFilePoller implements Runnable {
                 return json.toString();
             });
         } catch (Exception e) {
-            LOG.warn("Failed to collect code analyzer errors for " + uri, e);
+            LOG.warn("Failed to collect parser errors for " + uri, e);
             return "[]";
         }
     }
