@@ -43,7 +43,10 @@
         <p>The plugin requires an OpenAI-compatible API endpoint, which can be hosted in the cloud or run locally through a compatible inference server.</p>
     ]]></description>
 
-    <change-notes><![CDATA[Initial release]]></change-notes>
+    <change-notes><![CDATA[
+1.0.1: Remove usage of internal API<br>
+1.0.0: Initial release
+]]></change-notes>
 
     <idea-version since-build="232.0"/>
 
