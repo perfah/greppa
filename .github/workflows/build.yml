@@ -1,9 +1,12 @@
 # Builds the Rust server binaries for every supported platform and the
-# plugin for both IDE targets - one job per target - and publishes a
-# GitHub Release with installable zips, but only for version tags
-# (v1.0.0): a plain push only produces the workflow's build artifacts,
-# so the release list stays signal instead of accumulating one release
-# per commit.
+# plugin for both IDE targets - one job per target - and, when the
+# workflow is run manually (workflow_dispatch), publishes to the
+# JetBrains Marketplace and creates a GitHub Release with installable
+# zips: a plain push - and a version tag push alike - only produces the
+# workflow's build artifacts, so both outward-facing actions are
+# deliberate manual acts, never a side effect of pushing, and any build
+# can be published or released by dispatching the workflow from the
+# ref that carries it.
 #
 # The server binaries are built on each platform's native runner, so no
 # cross-compilation toolchains are needed: windows-latest is x64,
@@ -83,9 +86,11 @@
 # covered the same way (see above). Release assets download raw,
 # without GitHub's artifact wrapper, so each asset is the plugin zip
 # itself. The assets are named greppa-<version>-rustrover.zip /
-# greppa-<version>-intellij.zip; the version comes from the tag
-# (v1.0.0 -> 1.0.0), so version tags are expected to match the plugin
-# version in plugin.xml.
+# greppa-<version>-intellij.zip; the version comes from the tag when
+# the workflow is dispatched from one (v1.0.0 -> 1.0.0) and otherwise
+# from the dispatch's version input (see the release job's resolve
+# step), and is expected to match the plugin version in plugin.xml
+# either way.
 #
 # The publish job uploads the plugin to the JetBrains Marketplace, only
 # when the workflow is run manually (workflow_dispatch) - never on a
@@ -122,6 +127,17 @@ name: Build
 on:
   push:
   workflow_dispatch:
+    inputs:
+      # The version of the GitHub release a manual run creates: it
+      # names the release assets and the tag the release is created
+      # for. Read only when the run is dispatched from a branch - a
+      # dispatch from a tag takes the version from the tag instead -
+      # and required then, so the release job fails with a message
+      # instead of naming the assets after the branch.
+      version:
+        description: 'Version of the GitHub release, e.g. 1.0.1; required when the run is dispatched from a branch, because the release job reads it'
+        type: string
+        default: ''
 
 jobs:
   server:
@@ -392,7 +408,13 @@ jobs:
           ./gradlew :idea:publishPlugin
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The GitHub release, gated like the Marketplace upload above: the
+    # job runs only when the workflow is dispatched by hand
+    # (workflow_dispatch), never on a push - a version tag push no
+    # longer releases by itself. Releasing, like publishing, is a
+    # deliberate act, and any build can be released by dispatching the
+    # workflow from the ref that carries it.
+    if: github.event_name == 'workflow_dispatch'
     needs: [plugin-rustrover, plugin-intellij]
     runs-on: ubuntu-latest
     permissions:
@@ -407,6 +429,29 @@ jobs:
         with:
           pattern: greppa-*
           path: dist
+      # The version that names the release assets and the tag the
+      # release is created for. On a dispatch from a tag it comes from
+      # the tag (v1.0.0 -> 1.0.0); on a dispatch from a branch - where
+      # there is no tag - from the dispatch's version input, which is
+      # required then: without it the assets below would be named
+      # after the branch and the release would be created for a tag
+      # named after the branch. Exported for the staging step and the
+      # release action below.
+      - name: Resolve the release version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$INPUT_VERSION"
+            if [ -z "$version" ]; then
+              echo "A release run dispatched from a branch needs the 'version' input (e.g. 1.0.1): it names the release assets and the tag the release is created for." >&2
+              exit 1
+            fi
+          fi
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
       # The release assets must be single files, so each artifact's
       # entries are re-zipped under the versioned asset name. The
       # re-zip packs the identical entries the signed zip carried, so
@@ -414,13 +459,12 @@ jobs:
       # artifact download (see the workflow header comment); release
       # assets download raw, without GitHub's artifact wrapper, so
       # each asset is the plugin zip itself. The version comes from
-      # the tag (v1.0.0 -> 1.0.0): the release only runs for version
-      # tags, which are expected to match the plugin version in
-      # plugin.xml.
+      # the resolve step above and is expected to match the plugin
+      # version in plugin.xml.
       - name: Stage release assets
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="$RELEASE_VERSION"
           cd dist
           (cd greppa-rustrover && zip -r -q "../greppa-$version-rustrover.zip" *)
           (cd greppa-intellij && zip -r -q "../greppa-$version-intellij.zip" *)
@@ -428,3 +472,11 @@ jobs:
         with:
           files: dist/*.zip
           generate-release-notes: true
+          # The tag the release is created for: v<version> from the
+          # resolve step above. On a dispatch from a tag that is the
+          # dispatched tag itself - exactly what the action's default
+          # (the run's ref name) picks - and on a dispatch from a
+          # branch the default would be the branch name, so the tag
+          # is named explicitly instead. The action creates the tag
+          # at the run's commit when it does not exist yet.
+          tag_name: v${{ env.RELEASE_VERSION }}
