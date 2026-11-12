@@ -87,27 +87,30 @@
 # (v1.0.0 -> 1.0.0), so version tags are expected to match the plugin
 # version in plugin.xml.
 #
-# The publish job uploads the plugin to the JetBrains Marketplace, for
-# version tags only like the GitHub release, through the IntelliJ
-# Platform Gradle Plugin's publishPlugin task. Only the idea
-# subproject's :idea:publishPlugin runs - the IntelliJ IDEA target is
-# the primary, published one - and never together with the rustrover
-# subproject's :rustrover:publishPlugin: the two targets differ only in
-# which IDE distribution they compile against (both subprojects build
-# the same shared sources; see idea/build.gradle.kts), so both zips
-# carry the same plugin.xml - the same plugin id, version and default
-# channel - and the Marketplace keeps one update per version and
-# channel, so a second upload would be rejected as a duplicate version
-# with the first zip already live. One upload also serves every IDE:
-# the Marketplace has no per-IDE publishing - which IDEs can install
-# the plugin comes from plugin.xml's since-build and depends entries,
-# which both zips share - and the plugin depends only on the platform
-# module and the bundled Markdown plugin, so the uploaded zip installs
-# in IntelliJ IDEA and RustRover alike. The RustRover zip remains a
-# GitHub release asset (the release job below), where the per-target
-# zips are the point. The task reads the Marketplace personal access
-# token from the intellijPlatformPublishingToken project property,
-# which the job provides through its environment variable spelling
+# The publish job uploads the plugin to the JetBrains Marketplace, only
+# when the workflow is run manually (workflow_dispatch) - never on a
+# push, so no build reaches the Marketplace unasked, and any build can
+# be published by dispatching the workflow from the ref that carries
+# it - through the IntelliJ Platform Gradle Plugin's publishPlugin
+# task. Only the idea subproject's :idea:publishPlugin runs - the
+# IntelliJ IDEA target is the primary, published one - and never
+# together with the rustrover subproject's :rustrover:publishPlugin:
+# the two targets differ only in which IDE distribution they compile
+# against (both subprojects build the same shared sources; see
+# idea/build.gradle.kts), so both zips carry the same plugin.xml - the
+# same plugin id, version and default channel - and the Marketplace
+# keeps one update per version and channel, so a second upload would
+# be rejected as a duplicate version with the first zip already live.
+# One upload also serves every IDE: the Marketplace has no per-IDE
+# publishing - which IDEs can install the plugin comes from
+# plugin.xml's since-build and depends entries, which both zips share
+# - and the plugin depends only on the platform module and the bundled
+# Markdown plugin, so the uploaded zip installs in IntelliJ IDEA and
+# RustRover alike. The RustRover zip remains a GitHub release asset
+# (the release job below), where the per-target zips are the point.
+# The task reads the Marketplace personal access token from the
+# intellijPlatformPublishingToken project property, which the job
+# provides through its environment variable spelling
 # (ORG_GRADLE_PROJECT_intellijPlatformPublishingToken) from the
 # PUBLISHING_TOKEN repository secret - like the signing material, the
 # token never appears in the repository or the command line. The job
@@ -330,13 +333,18 @@ jobs:
 
   publish:
     name: Publish to JetBrains Marketplace
-    # Marketplace uploads are releases like the GitHub release below:
-    # only version tags publish. The job needs the plugin jobs so a
+    # Marketplace uploads are manual: the job runs only when the
+    # workflow is dispatched by hand (workflow_dispatch), never on a
+    # push - the workflow runs on pushes too, so no condition at all
+    # would upload to the Marketplace on every push. The dispatch gate
+    # keeps publishing a deliberate act while allowing any build to be
+    # published: dispatch the workflow from the branch or tag that
+    # carries the build to publish. The job needs the plugin jobs so a
     # broken build never reaches the Marketplace; their zips are not
     # reused though - publishPlugin builds, signs and uploads its own
     # distribution - so this job stages the server binaries and passes
     # the signing secrets exactly like the plugin jobs.
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'workflow_dispatch'
     needs: [plugin-rustrover, plugin-intellij]
     runs-on: ubuntu-latest
     steps:
