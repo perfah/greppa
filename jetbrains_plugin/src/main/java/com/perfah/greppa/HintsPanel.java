@@ -386,12 +386,20 @@ public class HintsPanel extends JPanel {
      * not working yet - without filling the Marketplace page. The steps
      * name the requirement - an OpenAI-compatible LLM service - and
      * present Ollama with the gemma model only as the default example,
-     * so no service or model reads as required. Once any analysis has
-     * rendered, the bundled server and the LLM service demonstrably
-     * work, so repeating the install steps would only be noise; the
-     * flag is persisted (see GreppaSettingsState.setupComplete), so the
-     * steps do not return after an IDE restart either. Called whenever
-     * the card is shown.
+     * so no service or model reads as required; the note that any other
+     * OpenAI-compatible service should work too belongs to that first
+     * step, where the service is chosen, and is hedged ("should"), like
+     * the README's compatibility claim, instead of promising that every
+     * service works. The second step names the Analyze button, like the
+     * "no analysis yet" message below: an analysis is generated only
+     * explicitly by default - every refresh trigger is off unless the
+     * user opts in (see GreppaSettingsState) - so opening a file alone
+     * does not generate one. Once any analysis has rendered, the
+     * bundled server and the LLM service demonstrably work, so
+     * repeating the install steps would only be noise; the flag is
+     * persisted (see GreppaSettingsState.setupComplete), so the steps
+     * do not return after an IDE restart either. Called whenever the
+     * card is shown.
      */
     private void updatePlaceholderText() {
         if (GreppaSettingsState.getInstance().setupComplete) {
@@ -410,10 +418,11 @@ public class HintsPanel extends JPanel {
                 "<b>First-time setup</b><br>" +
                 "1. Install an OpenAI-compatible LLM service. The default<br>" +
                 "example is Ollama (https://ollama.com) with the model<br>" +
-                "<code>ollama pull gemma4:31b-cloud</code>.<br>" +
-                "2. Open a file - its analysis appears in this window.<br><br>" +
-                "Any other service or model works too: set its base URL,<br>" +
-                "model and API key in <b>Settings | Tools | Greppa</b>.<br>" +
+                "<code>ollama pull gemma4:31b-cloud</code>. Any other OpenAI-compatible<br>" +
+                "service or model should work too: set its base URL, model<br>" +
+                "and API key in <b>Settings | Tools | Greppa</b>.<br>" +
+                "2. Open a file and click 'Analyze' - its analysis appears<br>" +
+                "in this window.<br>" +
                 "</center></html>"
         );
     }
