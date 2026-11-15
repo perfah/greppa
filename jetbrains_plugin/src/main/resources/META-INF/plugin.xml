@@ -44,6 +44,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
+1.0.2: Fix white-on-white plugin icon and adjust first-time setup instructions<br>
 1.0.1: Remove usage of internal API<br>
 1.0.0: Initial release
 ]]></change-notes>
