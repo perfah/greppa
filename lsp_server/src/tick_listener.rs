@@ -75,6 +75,25 @@ fn llm_api_key() -> String {
     std::env::var("ANTIVIBER_LLM_API_KEY").unwrap_or_else(|_| "ollama".to_string())
 }
 
+/// Resolves the maximum number of tokens the analysis inference may
+/// generate, from the environment. The budget is shared between the
+/// answer and any hidden reasoning: hybrid reasoning ("thinking")
+/// models such as GLM generate a long chain-of-thought before the
+/// answer, and when the budget is too small for both, the reasoning
+/// alone exhausts it - the stream then ends without a single answer
+/// token and the panel shows the no-analysis fallback text in
+/// run_ollama_work. The IDE's server descriptor passes the value
+/// configured in the settings as ANTIVIBER_LLM_MAX_TOKENS; the default
+/// of 16384 leaves room for a thinking model's reasoning plus the
+/// full Markdown document and applies when the variable is unset or
+/// invalid.
+fn llm_max_tokens() -> u16 {
+    std::env::var("ANTIVIBER_LLM_MAX_TOKENS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(16384)
+}
+
 /// Builds the client for the configured OpenAI-compatible service.
 fn llm_client() -> Client<OpenAIConfig> {
     let config = OpenAIConfig::new()
@@ -528,10 +547,16 @@ async fn run_ollama_work(
 
     // The complete document, or a fallback when the model produced nothing.
     // Sending is skipped when the last throttled snapshot already contained
-    // the complete text.
+    // the complete text. The fallback names the most likely cause of an
+    // empty stream: the token budget (see llm_max_tokens) is shared
+    // between the answer and any hidden reasoning, and a reasoning model
+    // can spend all of it on thinking before generating a single answer
+    // token.
     let final_markdown = if accumulated.is_empty() {
         log_message("[tick llm] stream ended without any content");
-        "No analysis returned by the LLM service.".to_string()
+        "No analysis returned by the LLM service. Please check the quota (max tokens in the settings): \
+a reasoning model can spend the whole token budget on hidden thinking before generating any answer."
+            .to_string()
     } else {
         // Log the raw response so that deviations from the requested
         // Markdown structure are visible in the log file.
@@ -580,8 +605,15 @@ fn build_analysis_request(
                 .build()?,
         ])
         // The response is a full Markdown document with code snippets, so
-        // it needs plenty of room.
-        .max_tokens(4096u16)
+        // it needs plenty of room. Hybrid reasoning ("thinking") models
+        // such as GLM generate a hidden chain-of-thought before the
+        // answer, and the token budget is shared between the two: with
+        // 4096 the reasoning alone exhausted the budget, so the stream
+        // ended without a single answer token and the panel showed "No
+        // analysis returned by the LLM service.". The budget is
+        // configurable (see llm_max_tokens) because the room a model
+        // needs depends on whether and how much it reasons.
+        .max_tokens(llm_max_tokens())
         .temperature(0.1_f32)
         .top_p(0.8_f32)
         .build()?;
