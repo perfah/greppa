@@ -78,6 +78,14 @@ public class GreppaSettingsComponent {
     /** Free-text standing instructions for the LLM; empty means none. */
     private final JTextArea guidelineField = new JTextArea(4, 40);
     /**
+     * Maximum number of tokens the LLM may generate for one analysis
+     * (see GreppaSettingsState.llmMaxTokens). A spinner instead of a
+     * text field, like the auto-refresh field below, so the value is
+     * always a valid positive number.
+     */
+    private final JSpinner llmMaxTokensField =
+            new JSpinner(new SpinnerNumberModel(16384, 1, Integer.MAX_VALUE, 256));
+    /**
      * Minimum number of characters that must have changed since the last
      * analysis before writing triggers a new one; 0 disables the
      * automatic refresh while writing. A spinner instead of a text field,
@@ -125,6 +133,13 @@ public class GreppaSettingsComponent {
         guidelineField.setToolTipText(
                 "Free-text standing instructions for the LLM, e.g. 'prefer functional style, never suggest unsafe code'. "
                         + "Applied to all analyses and completions. Empty = no guideline.");
+
+        llmMaxTokensField.setToolTipText(
+                "Maximum number of tokens the LLM may generate for one analysis. "
+                        + "The budget is shared between the answer and any hidden reasoning: reasoning-heavy models "
+                        + "generate a long chain-of-thought before the answer, and when the budget is too small for both, "
+                        + "the reasoning alone exhausts it - the analysis then ends with 'No analysis returned by the LLM service.'. "
+                        + "Default: 16384.");
 
         autoUpdateMinCharsField.setToolTipText(
                 "Minimum number of characters that must have changed since the last analysis "
@@ -191,6 +206,7 @@ public class GreppaSettingsComponent {
                 .addLabeledComponent("LLM model:", llmModelField, 1, false)
                 .addLabeledComponent("LLM API key:", llmApiKeyField, 1, false)
                 .addLabeledComponent("LLM guideline:", new JBScrollPane(guidelineField), 1, false)
+                .addLabeledComponent("LLM max tokens:", llmMaxTokensField, 1, false)
                 .addLabeledComponent("Min. chars changed for auto-refresh:", autoUpdateMinCharsField, 1, false)
                 .addComponent(refreshOnOpenField)
                 .addComponent(refreshOnSaveField)
@@ -307,6 +323,16 @@ public class GreppaSettingsComponent {
     /** Sets the shown guideline; null is treated as the empty string. */
     public void setGuideline(String guideline) {
         guidelineField.setText(guideline == null ? "" : guideline);
+    }
+
+    /** Returns the maximum number of tokens one analysis may generate. */
+    public int getLlmMaxTokens() {
+        return (Integer) llmMaxTokensField.getValue();
+    }
+
+    /** Sets the shown maximum number of tokens one analysis may generate. */
+    public void setLlmMaxTokens(int maxTokens) {
+        llmMaxTokensField.setValue(maxTokens);
     }
 
     /**

@@ -28,6 +28,7 @@ public class GreppaSettingsConfigurable implements Configurable {
                 || !settingsComponent.getLlmModel().equals(settings.llmModel)
                 || !settingsComponent.getLlmApiKey().equals(settings.getLlmApiKey())
                 || !settingsComponent.getGuideline().equals(settings.guideline)
+                || settingsComponent.getLlmMaxTokens() != settings.llmMaxTokens
                 || !settingsComponent.getDisabledSections().equals(settings.disabledSections)
                 || settingsComponent.getAutoUpdateMinChars() != settings.autoUpdateMinChars
                 || settingsComponent.isRefreshOnOpen() != settings.refreshOnOpen
@@ -41,6 +42,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         settings.llmModel = settingsComponent.getLlmModel();
         settings.setLlmApiKey(settingsComponent.getLlmApiKey());
         settings.guideline = settingsComponent.getGuideline();
+        settings.llmMaxTokens = settingsComponent.getLlmMaxTokens();
         settings.disabledSections = settingsComponent.getDisabledSections();
         settings.autoUpdateMinChars = settingsComponent.getAutoUpdateMinChars();
         settings.refreshOnOpen = settingsComponent.isRefreshOnOpen();
@@ -54,6 +56,11 @@ public class GreppaSettingsConfigurable implements Configurable {
         settingsComponent.setLlmModel(settings.llmModel);
         settingsComponent.setLlmApiKey(settings.getLlmApiKey());
         settingsComponent.setGuideline(settings.guideline);
+        // A hand-edited non-positive value in the XML means "leave the
+        // variable unset" (see GreppaSettingsState.llmMaxTokens), which
+        // applies the server's built-in default of 16384; the spinner's
+        // model starts at 1, so that default is shown instead.
+        settingsComponent.setLlmMaxTokens(settings.llmMaxTokens > 0 ? settings.llmMaxTokens : 16384);
         settingsComponent.setDisabledSections(settings.disabledSections);
         // Math.max guards a hand-edited negative value in the XML: the
         // spinner's model rejects values below 0.
