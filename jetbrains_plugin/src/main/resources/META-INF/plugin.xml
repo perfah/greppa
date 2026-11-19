@@ -50,7 +50,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-1.0.3: Make the analysis token budget configurable and fix empty analyses with reasoning-heavy models<br>
+1.0.3: Add an LLM max tokens setting for use of reasoning-heavy models and populate settings fields with their default values<br>
 1.0.2: Fix white-on-white plugin icon and adjust first-time setup instructions<br>
 1.0.1: Remove usage of internal API<br>
 1.0.0: Initial release
