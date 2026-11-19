@@ -1,7 +1,13 @@
 <idea-plugin>
     <id>com.perfah.greppa</id>
     <name>Greppa</name>
-    <version>1.0.2</version>
+    <!-- The plugin version. Keep in sync with the other places that
+         define it: lsp_server/Cargo.toml (the Rust server reports its
+         version to the IDE in the initialize response) and the version in
+         jetbrains_plugin/idea/build.gradle.kts and
+         jetbrains_plugin/rustrover/build.gradle.kts (the distribution
+         versions). Bump all four together. -->
+    <version>1.0.3</version>
     <vendor>perfah</vendor>
 
     <description><![CDATA[
@@ -44,6 +50,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
+1.0.3: Make the analysis token budget configurable and fix empty analyses with reasoning-heavy models<br>
 1.0.2: Fix white-on-white plugin icon and adjust first-time setup instructions<br>
 1.0.1: Remove usage of internal API<br>
 1.0.0: Initial release

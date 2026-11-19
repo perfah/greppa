@@ -7,8 +7,11 @@ plugins {
 }
 
 group = "com.perfah"
-// Keep in sync with the <version> in plugin.xml.
-version = "1.0.2"
+// The plugin version. Keep in sync with the other places that define
+// it: the <version> in plugin.xml, the version in
+// rustrover/build.gradle.kts, and lsp_server/Cargo.toml (the Rust
+// server reports that version to the IDE). Bump all four together.
+version = "1.0.3"
 
 java {
     toolchain {
