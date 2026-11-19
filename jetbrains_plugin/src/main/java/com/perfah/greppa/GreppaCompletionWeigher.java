@@ -38,7 +38,7 @@ import org.jetbrains.annotations.NotNull;
 public final class GreppaCompletionWeigher extends LookupElementWeigher {
 
     /** The detail text the Rust server sets on its completion item (main.rs). */
-    private static final String ANTIVIBER_DETAIL = "Greppa suggestion";
+    private static final String GREPPA_DETAIL = "Greppa suggestion";
 
     public GreppaCompletionWeigher() {
         // id, dependsOnReplacableText, negated. The weight does not depend
@@ -53,8 +53,8 @@ public final class GreppaCompletionWeigher extends LookupElementWeigher {
     public Comparable weigh(@NotNull LookupElement element) {
         LookupElementPresentation presentation = new LookupElementPresentation();
         element.renderElement(presentation);
-        boolean isGreppa = ANTIVIBER_DETAIL.equals(presentation.getTypeText())
-                || ANTIVIBER_DETAIL.equals(presentation.getTailText());
+        boolean isGreppa = GREPPA_DETAIL.equals(presentation.getTypeText())
+                || GREPPA_DETAIL.equals(presentation.getTailText());
         return isGreppa ? 0 : 1;
     }
 }

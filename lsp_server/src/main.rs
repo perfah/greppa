@@ -746,13 +746,13 @@ fn cancel_running_tick(state: &ServerState) {
 /// last completed analysis before a document change triggers a new one;
 /// 0 disables the automatic refresh while writing entirely. Configured
 /// in the IDE's settings and passed as the
-/// ANTIVIBER_AUTO_UPDATE_MIN_CHARS environment variable when the server
+/// GREPPA_AUTO_UPDATE_MIN_CHARS environment variable when the server
 /// is launched; the default of 0 matches the IDE setting's default -
 /// like every refresh trigger, the automatic refresh is off unless the
 /// user opts in - and applies only when the variable is unset or
 /// invalid.
 fn auto_update_min_chars() -> usize {
-    std::env::var("ANTIVIBER_AUTO_UPDATE_MIN_CHARS")
+    std::env::var("GREPPA_AUTO_UPDATE_MIN_CHARS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(0)
@@ -760,7 +760,7 @@ fn auto_update_min_chars() -> usize {
 
 /// Whether opening a file triggers its analysis: the did_open handler
 /// schedules a tick 500 ms after the open when this is on. Configured
-/// in the IDE's settings and passed as the ANTIVIBER_REFRESH_ON_OPEN
+/// in the IDE's settings and passed as the GREPPA_REFRESH_ON_OPEN
 /// environment variable when the server is launched; unset or any value
 /// other than "true" means off - the default, matching the IDE setting's
 /// default. Like every refresh trigger the open trigger is off unless
@@ -768,7 +768,7 @@ fn auto_update_min_chars() -> usize {
 /// installation. The IDE's tab-selection listener, which also fires on
 /// file opens, is gated by the same setting on the IDE side.
 fn refresh_on_open() -> bool {
-    std::env::var("ANTIVIBER_REFRESH_ON_OPEN")
+    std::env::var("GREPPA_REFRESH_ON_OPEN")
         .map(|value| value == "true")
         .unwrap_or(false)
 }
@@ -1652,10 +1652,10 @@ fn clean_old_hint_files(dir: &PathBuf) {
 }
 
 fn hints_dir() -> PathBuf {
-    // The IDE-side poller (HintsFilePoller) treats ANTIVIBER_HINTS_DIR as the
+    // The IDE-side poller (HintsFilePoller) treats GREPPA_HINTS_DIR as the
     // base directory; honor it here too so both sides always agree on where
     // the analysis files live.
-    if let Ok(dir) = env::var("ANTIVIBER_HINTS_DIR") {
+    if let Ok(dir) = env::var("GREPPA_HINTS_DIR") {
         if !dir.is_empty() {
             return PathBuf::from(dir).join("greppa-hints");
         }

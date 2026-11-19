@@ -32,7 +32,7 @@ public class GreppaSettingsComponent {
      * The analysis document's sections in document order. The keys match
      * the section keys the Rust prompt builder toggles (see prompts.rs);
      * they travel through the disabledSections setting and the
-     * ANTIVIBER_DISABLED_SECTIONS environment variable, so the two
+     * GREPPA_DISABLED_SECTIONS environment variable, so the two
      * lists must stay in sync.
      */
     private static final List<Section> SECTIONS = List.of(

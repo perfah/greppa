@@ -30,7 +30,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * "http://localhost:11434/v1" (Ollama), "https://api.openai.com/v1"
      * (OpenAI) or "https://api.anthropic.com/v1/" (Anthropic's
      * OpenAI-compatible endpoint). Passed to the LSP server as the
-     * ANTIVIBER_LLM_BASE_URL environment variable when the server is
+     * GREPPA_LLM_BASE_URL environment variable when the server is
      * launched; an empty value leaves the variable unset so the Rust
      * server's built-in default (a local Ollama) applies.
      */
@@ -39,7 +39,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
     /**
      * The LLM model the LSP server uses for its analyses and completions,
      * e.g. "qwen2.5-coder:7b" (Ollama) or "gpt-4o-mini" (OpenAI). Passed
-     * to the server as the ANTIVIBER_LLM_MODEL environment variable; an
+     * to the server as the GREPPA_LLM_MODEL environment variable; an
      * empty value leaves the variable unset so the Rust server's built-in
      * default model applies.
      */
@@ -50,7 +50,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * or constraints like "prefer functional style, never suggest unsafe
      * code". Injected into both the analysis and the completion prompts,
      * so it guides every LLM output. Passed to the server as the
-     * ANTIVIBER_LLM_GUIDELINE environment variable when the server is
+     * GREPPA_LLM_GUIDELINE environment variable when the server is
      * launched; an empty value leaves the variable unset and the prompts
      * stay guideline-free. Like the other LLM settings, a change takes
      * effect the next time the LSP server is started.
@@ -62,7 +62,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * the settings, comma-separated; empty (the default) means every
      * section is enabled. The settings' checkboxes produce the keys (see
      * GreppaSettingsComponent.SECTIONS); passed to the LSP server as the
-     * ANTIVIBER_DISABLED_SECTIONS environment variable when the server is
+     * GREPPA_DISABLED_SECTIONS environment variable when the server is
      * launched, the Rust prompt builder omits the disabled sections'
      * instructions so the analysis document contains only the enabled
      * sections. Unknown keys are ignored. Like the other LLM settings, a
@@ -100,7 +100,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * file becomes the selected editor, because gating either alone
      * would leave every file open still spending tokens:
      * - the LSP server's own on-open tick (did_open in main.rs), gated
-     *   through the ANTIVIBER_REFRESH_ON_OPEN environment variable this
+     *   through the GREPPA_REFRESH_ON_OPEN environment variable this
      *   setting is passed to the server as when it is launched (see
      *   GreppaLspServerDescriptor.createCommandLine), so that half
      *   takes effect the next time the server starts;
@@ -148,7 +148,7 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * IDE's PasswordSafe, or an empty string when none is stored. Local
      * services such as Ollama ignore it; hosted services (OpenAI,
      * Anthropic's compatible endpoint, etc.) require it. Passed to the
-     * server as the ANTIVIBER_LLM_API_KEY environment variable; an empty
+     * server as the GREPPA_LLM_API_KEY environment variable; an empty
      * value leaves the variable unset so the Rust server's built-in
      * placeholder key applies.
      *

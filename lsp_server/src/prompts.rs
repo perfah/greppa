@@ -3,7 +3,7 @@ use tower_lsp::lsp_types::Position;
 
 /// The user's free-text standing instructions for the LLM, configured in
 /// the IDE's settings (the guideline field) and passed to the server as
-/// the ANTIVIBER_LLM_GUIDELINE environment variable when the LSP server
+/// the GREPPA_LLM_GUIDELINE environment variable when the LSP server
 /// is launched. Trimmed, and None when unset or empty: no guideline.
 ///
 /// Resolved here, where the prompts are built, so the guideline has a
@@ -12,7 +12,7 @@ use tower_lsp::lsp_types::Position;
 /// variable at server launch), so changing the guideline in the settings
 /// takes effect the next time the LSP server starts.
 fn guideline() -> Option<String> {
-    std::env::var("ANTIVIBER_LLM_GUIDELINE")
+    std::env::var("GREPPA_LLM_GUIDELINE")
         .ok()
         .map(|guideline| guideline.trim().to_string())
         .filter(|guideline| !guideline.is_empty())
@@ -21,7 +21,7 @@ fn guideline() -> Option<String> {
 /// Whether the analysis document section with the given key is enabled.
 /// The IDE's settings have one checkbox per section of the analysis
 /// document; the disabled sections' keys are passed as the
-/// ANTIVIBER_DISABLED_SECTIONS environment variable (comma-separated)
+/// GREPPA_DISABLED_SECTIONS environment variable (comma-separated)
 /// when the LSP server is launched. Unset or empty means every section
 /// is enabled - the default, and the state of plugin builds without the
 /// section settings; unknown keys are ignored.
@@ -31,7 +31,7 @@ fn guideline() -> Option<String> {
 /// environment of a running process never changes, so changing the
 /// enabled sections takes effect the next time the LSP server starts.
 fn section_enabled(key: &str) -> bool {
-    match std::env::var("ANTIVIBER_DISABLED_SECTIONS") {
+    match std::env::var("GREPPA_DISABLED_SECTIONS") {
         Ok(disabled) => {
             let disabled = disabled.trim().to_ascii_lowercase();
             if disabled.is_empty() {

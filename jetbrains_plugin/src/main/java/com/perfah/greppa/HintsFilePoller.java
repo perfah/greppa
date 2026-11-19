@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 /**
  * Polls the LSP server's Markdown analysis files and updates the tool window.
  * The Rust server writes one file per analyzed file to
- * %ANTIVIBER_HINTS_DIR%/greppa-hints/&lt;sanitized-uri&gt;.md
+ * %GREPPA_HINTS_DIR%/greppa-hints/&lt;sanitized-uri&gt;.md
  * (or %TEMP%/greppa-hints on Windows, /tmp/greppa-hints elsewhere).
  * The first line of each file is a hidden marker that names the analyzed
  * file's URI; the rest of the file is the Markdown document.
@@ -573,11 +573,11 @@ public class HintsFilePoller implements Runnable {
 
     /**
      * Returns the hints directory that both the IDE poller and the Rust
-     * server agree on: $ANTIVIBER_HINTS_DIR/greppa-hints, or
+     * server agree on: $GREPPA_HINTS_DIR/greppa-hints, or
      * &lt;tmp&gt;/greppa-hints when the environment variable is not set.
      */
     private static Path getHintsDir() {
-        String envDir = System.getenv("ANTIVIBER_HINTS_DIR");
+        String envDir = System.getenv("GREPPA_HINTS_DIR");
         String baseDir = (envDir != null && !envDir.isEmpty())
                 ? envDir
                 : System.getProperty("java.io.tmpdir");

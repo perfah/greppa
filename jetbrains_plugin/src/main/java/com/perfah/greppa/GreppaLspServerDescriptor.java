@@ -83,38 +83,38 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         commandLine.setExePath(serverFile.getAbsolutePath());
         commandLine.setWorkDirectory(serverFile.getParentFile());
         // Prevent BLAS/OpenMP thread-pool initialization from blocking the LSP
-        // handshake. The Rust server still enables GPU via ANTIVIBER_USE_GPU=1.
+        // handshake. The Rust server still enables GPU via GREPPA_USE_GPU=1.
         commandLine.withEnvironment("MKL_NUM_THREADS", "1");
         commandLine.withEnvironment("OMP_NUM_THREADS", "1");
         commandLine.withEnvironment("RAYON_NUM_THREADS", "1");
         // The LLM service configuration. The Rust server reads
-        // ANTIVIBER_LLM_BASE_URL, ANTIVIBER_LLM_MODEL and
-        // ANTIVIBER_LLM_API_KEY itself (both the analysis listener and the
+        // GREPPA_LLM_BASE_URL, GREPPA_LLM_MODEL and
+        // GREPPA_LLM_API_KEY itself (both the analysis listener and the
         // completion helper), so the settings only have to reach the
         // server's environment. Empty settings leave the variables unset
         // and the server's built-in defaults apply: a local Ollama at
         // http://localhost:11434/v1 with the gemma4:31b-cloud model and a
         // placeholder key that local services ignore.
         if (settings.llmBaseUrl != null && !settings.llmBaseUrl.isBlank()) {
-            commandLine.withEnvironment("ANTIVIBER_LLM_BASE_URL", settings.llmBaseUrl);
-            LOG.info("Setting ANTIVIBER_LLM_BASE_URL to " + settings.llmBaseUrl);
+            commandLine.withEnvironment("GREPPA_LLM_BASE_URL", settings.llmBaseUrl);
+            LOG.info("Setting GREPPA_LLM_BASE_URL to " + settings.llmBaseUrl);
         }
         if (settings.llmModel != null && !settings.llmModel.isBlank()) {
-            commandLine.withEnvironment("ANTIVIBER_LLM_MODEL", settings.llmModel);
-            LOG.info("Setting ANTIVIBER_LLM_MODEL to " + settings.llmModel);
+            commandLine.withEnvironment("GREPPA_LLM_MODEL", settings.llmModel);
+            LOG.info("Setting GREPPA_LLM_MODEL to " + settings.llmModel);
         }
         String llmApiKey = settings.getLlmApiKey();
         if (!llmApiKey.isBlank()) {
-            commandLine.withEnvironment("ANTIVIBER_LLM_API_KEY", llmApiKey);
+            commandLine.withEnvironment("GREPPA_LLM_API_KEY", llmApiKey);
             // The key itself is deliberately not logged.
         }
         // The user's free-text standing instructions for the LLM. The Rust
-        // server's prompt builders read ANTIVIBER_LLM_GUIDELINE and inject
+        // server's prompt builders read GREPPA_LLM_GUIDELINE and inject
         // it into the analysis and completion prompts; an empty setting
         // leaves the variable unset and the prompts stay guideline-free.
         if (settings.guideline != null && !settings.guideline.isBlank()) {
-            commandLine.withEnvironment("ANTIVIBER_LLM_GUIDELINE", settings.guideline);
-            LOG.info("Setting ANTIVIBER_LLM_GUIDELINE to " + settings.guideline);
+            commandLine.withEnvironment("GREPPA_LLM_GUIDELINE", settings.guideline);
+            LOG.info("Setting GREPPA_LLM_GUIDELINE to " + settings.guideline);
         }
         // The analysis document's sections the user disabled in the
         // settings: the Rust prompt builder omits the disabled sections'
@@ -123,8 +123,8 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         // server reads as every section enabled - the default, and the
         // state of plugin builds without the section settings.
         if (settings.disabledSections != null && !settings.disabledSections.isBlank()) {
-            commandLine.withEnvironment("ANTIVIBER_DISABLED_SECTIONS", settings.disabledSections);
-            LOG.info("Setting ANTIVIBER_DISABLED_SECTIONS to " + settings.disabledSections);
+            commandLine.withEnvironment("GREPPA_DISABLED_SECTIONS", settings.disabledSections);
+            LOG.info("Setting GREPPA_DISABLED_SECTIONS to " + settings.disabledSections);
         }
         // The auto-refresh threshold for edits: the minimum number of
         // characters that must have changed since the last completed
@@ -134,9 +134,9 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         // server's own fallback only applies when the variable is unset,
         // which does not happen when the plugin launches the server.
         commandLine.withEnvironment(
-                "ANTIVIBER_AUTO_UPDATE_MIN_CHARS",
+                "GREPPA_AUTO_UPDATE_MIN_CHARS",
                 String.valueOf(settings.autoUpdateMinChars));
-        LOG.info("Setting ANTIVIBER_AUTO_UPDATE_MIN_CHARS to " + settings.autoUpdateMinChars);
+        LOG.info("Setting GREPPA_AUTO_UPDATE_MIN_CHARS to " + settings.autoUpdateMinChars);
         // Whether opening a file triggers its analysis: the server's
         // did_open handler schedules a tick 500 ms after the open when
         // this is on (see refresh_on_open in main.rs). Always passed,
@@ -150,9 +150,9 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         // LspTabSelectionListener), so both open triggers follow one
         // toggle.
         commandLine.withEnvironment(
-                "ANTIVIBER_REFRESH_ON_OPEN",
+                "GREPPA_REFRESH_ON_OPEN",
                 String.valueOf(settings.refreshOnOpen));
-        LOG.info("Setting ANTIVIBER_REFRESH_ON_OPEN to " + settings.refreshOnOpen);
+        LOG.info("Setting GREPPA_REFRESH_ON_OPEN to " + settings.refreshOnOpen);
         LOG.info("Greppa LSP command line: " + commandLine.getCommandLineString());
         return commandLine;
     }

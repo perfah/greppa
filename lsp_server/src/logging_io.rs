@@ -29,7 +29,7 @@ lazy_static::lazy_static! {
 }
 
 fn log_file_path() -> PathBuf {
-    match std::env::var("ANTIVIBER_LOG_PATH") {
+    match std::env::var("GREPPA_LOG_PATH") {
         Ok(p) => PathBuf::from(p),
         Err(_) => {
             #[cfg(target_os = "windows")]

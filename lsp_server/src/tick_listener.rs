@@ -51,28 +51,28 @@ const COMPLETION_MAX_TOKENS: u16 = 1024;
 /// Anthropic's OpenAI-compatible endpoint. The default is a local
 /// Ollama instance, the service the plugin originally shipped with.
 pub(crate) fn llm_base_url() -> String {
-    std::env::var("ANTIVIBER_LLM_BASE_URL")
+    std::env::var("GREPPA_LLM_BASE_URL")
         .unwrap_or_else(|_| "http://localhost:11434/v1".to_string())
 }
 
 /// Resolves the model name from the environment. The IDE's server
 /// descriptor passes the model configured in the settings as
-/// ANTIVIBER_LLM_MODEL, so a model set in the IDE reaches the server
+/// GREPPA_LLM_MODEL, so a model set in the IDE reaches the server
 /// here; the default is the Ollama tag "gemma4:31b-cloud", the model
 /// the plugin's default configuration targets. Point the variable at
 /// the provider's own model name (e.g. "gpt-4o-mini" for OpenAI) to
 /// use a different service.
 pub(crate) fn llm_model() -> String {
-    std::env::var("ANTIVIBER_LLM_MODEL")
+    std::env::var("GREPPA_LLM_MODEL")
         .unwrap_or_else(|_| "gemma4:31b-cloud".to_string())
 }
 
 /// Resolves the API key sent as the bearer token. Local services such
 /// as Ollama ignore it, which is why the default is a placeholder;
 /// hosted services (OpenAI, Anthropic's compatible endpoint, etc.)
-/// need a real key in ANTIVIBER_LLM_API_KEY.
+/// need a real key in GREPPA_LLM_API_KEY.
 fn llm_api_key() -> String {
-    std::env::var("ANTIVIBER_LLM_API_KEY").unwrap_or_else(|_| "ollama".to_string())
+    std::env::var("GREPPA_LLM_API_KEY").unwrap_or_else(|_| "ollama".to_string())
 }
 
 /// Resolves the maximum number of tokens the analysis inference may
@@ -83,12 +83,12 @@ fn llm_api_key() -> String {
 /// alone exhausts it - the stream then ends without a single answer
 /// token and the panel shows the no-analysis fallback text in
 /// run_ollama_work. The IDE's server descriptor passes the value
-/// configured in the settings as ANTIVIBER_LLM_MAX_TOKENS; the default
+/// configured in the settings as GREPPA_LLM_MAX_TOKENS; the default
 /// of 16384 leaves room for a thinking model's reasoning plus the
 /// full Markdown document and applies when the variable is unset or
 /// invalid.
 fn llm_max_tokens() -> u16 {
-    std::env::var("ANTIVIBER_LLM_MAX_TOKENS")
+    std::env::var("GREPPA_LLM_MAX_TOKENS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(16384)
