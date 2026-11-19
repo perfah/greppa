@@ -89,10 +89,12 @@ public class GreppaSettingsComponent {
      * Minimum number of characters that must have changed since the last
      * analysis before writing triggers a new one; 0 disables the
      * automatic refresh while writing. A spinner instead of a text field,
-     * so the value is always a valid non-negative number.
+     * so the value is always a valid non-negative number. The model's
+     * initial value is the setting's default (0), like the max-tokens
+     * spinner's, so the field is populated with the default value.
      */
     private final JSpinner autoUpdateMinCharsField =
-            new JSpinner(new SpinnerNumberModel(50, 0, Integer.MAX_VALUE, 1));
+            new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
     /**
      * Toggles the save-triggered refresh (see
      * GreppaSettingsState.refreshOnSave). A checkbox with its own label
