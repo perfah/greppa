@@ -1,7 +1,7 @@
 use async_openai::config::OpenAIConfig;
 use async_openai::types::{
-    ChatCompletionRequestMessageArgs, CreateChatCompletionRequest,
-    CreateChatCompletionRequestArgs, Role,
+    ChatCompletionRequestMessageArgs, CompletionUsage, CreateChatCompletionRequest,
+    CreateChatCompletionRequestArgs, FinishReason, Role,
 };
 use async_openai::Client;
 use futures::StreamExt;
@@ -77,21 +77,33 @@ fn llm_api_key() -> String {
 
 /// Resolves the maximum number of tokens the analysis inference may
 /// generate, from the environment. The budget is shared between the
-/// answer and any hidden reasoning: hybrid reasoning ("thinking")
-/// models such as GLM generate a long chain-of-thought before the
-/// answer, and when the budget is too small for both, the reasoning
-/// alone exhausts it - the stream then ends without a single answer
-/// token and the panel shows the no-analysis fallback text in
-/// run_ollama_work. The IDE's server descriptor passes the value
+/// answer and any hidden reasoning: reasoning-heavy models generate a
+/// long chain-of-thought before the answer, and when the budget is
+/// too small for both, the reasoning alone exhausts it - the stream
+/// then ends with the finish reason "length" without a single answer
+/// token, and the panel shows the no-analysis fallback text (see
+/// run_ollama_work). The IDE's server descriptor passes the value
 /// configured in the settings as GREPPA_LLM_MAX_TOKENS; the default
-/// of 16384 leaves room for a thinking model's reasoning plus the
-/// full Markdown document and applies when the variable is unset or
-/// invalid.
+/// of 16384 leaves room for a reasoning model's chain-of-thought plus
+/// the full Markdown document and applies when the variable is unset
+/// or invalid. The value travels in a 16-bit field of the OpenAI chat
+/// request (the client library's max_tokens type), so the ceiling is
+/// 65535; a larger configured value is logged and falls back to the
+/// default instead of silently undoing the user's tuning.
 fn llm_max_tokens() -> u16 {
-    std::env::var("GREPPA_LLM_MAX_TOKENS")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(16384)
+    match std::env::var("GREPPA_LLM_MAX_TOKENS") {
+        Ok(value) => match value.parse::<u16>() {
+            Ok(max_tokens) => max_tokens,
+            Err(_) => {
+                log_message(&format!(
+                    "[tick llm] invalid GREPPA_LLM_MAX_TOKENS value '{}', using the default of 16384 (the maximum is 65535)",
+                    value
+                ));
+                16384
+            }
+        },
+        Err(_) => 16384,
+    }
 }
 
 /// Builds the client for the configured OpenAI-compatible service.
@@ -423,6 +435,15 @@ fn strip_repeated_prefix(prefix: &str, completion: &str) -> String {
 ///
 /// The `attachments` are the files the user checked in the Imports
 /// pane; the prompt renders them as context after the analyzed code.
+///
+/// Only the answer text is accumulated: the chunks' delta.content. A
+/// reasoning model's hidden chain-of-thought arrives in a separate
+/// delta field the OpenAI client library does not expose, so the
+/// accumulated document stays empty for the whole reasoning phase -
+/// and when the stream then ends without any content, the finish
+/// reason and usage captured below say whether the token budget was
+/// exhausted by that reasoning or the model ended its turn without
+/// any answer text at all.
 async fn run_ollama_work(
     file_content: &str,
     cursor_position: Option<Position>,
@@ -491,6 +512,17 @@ async fn run_ollama_work(
     // Whether the receiving tick was cancelled (a snapshot send failed
     // because the receiver was dropped), so the stream must be aborted.
     let mut receiver_dropped = false;
+    // The finish reason of the stream's last choice, and the token usage
+    // when the service reports one. They say WHY a stream can end
+    // without any answer text: FinishReason::Length means the token
+    // budget was exhausted before the first answer token - a
+    // reasoning-heavy model can spend all of it on hidden
+    // chain-of-thought - while a stop without content means the model
+    // ended its turn without writing any answer text at all. Without
+    // them, an empty stream was indistinguishable from a budget
+    // exhaustion.
+    let mut finish_reason: Option<FinishReason> = None;
+    let mut usage: Option<CompletionUsage> = None;
 
     while let Some(result) = stream.next().await {
         let response = match result {
@@ -505,12 +537,21 @@ async fn run_ollama_work(
         };
 
         for choice in response.choices {
+            if let Some(reason) = choice.finish_reason {
+                finish_reason = Some(reason);
+            }
             if let Some(content) = choice.delta.content {
                 if !content.is_empty() {
                     chunk_count += 1;
                     accumulated.push_str(&content);
                 }
             }
+        }
+        // The final chunk carries the inference's token usage on the
+        // services that report it; kept so the empty-stream case below
+        // can log what the budget was spent on.
+        if let Some(stream_usage) = response.usage {
+            usage = Some(stream_usage);
         }
 
         // Send the document accumulated so far at most every
@@ -547,16 +588,36 @@ async fn run_ollama_work(
 
     // The complete document, or a fallback when the model produced nothing.
     // Sending is skipped when the last throttled snapshot already contained
-    // the complete text. The fallback names the most likely cause of an
-    // empty stream: the token budget (see llm_max_tokens) is shared
-    // between the answer and any hidden reasoning, and a reasoning model
-    // can spend all of it on thinking before generating a single answer
-    // token.
+    // the complete text. The fallback names the cause the stream's finish
+    // reason tells apart: "length" means the token budget (see
+    // llm_max_tokens) was exhausted before a single answer token was
+    // generated - a reasoning model can spend all of it on hidden
+    // thinking, and only a bigger budget or a non-reasoning model fixes
+    // that - while any other finish reason means the model ended its
+    // turn without writing any answer text at all, which no budget
+    // increase fixes. The usage line in the log shows what the budget
+    // was spent on when the service reports it.
     let final_markdown = if accumulated.is_empty() {
-        log_message("[tick llm] stream ended without any content");
-        "No analysis returned by the LLM service. Please check the quota (max tokens in the settings): \
-a reasoning model can spend the whole token budget on hidden thinking before generating any answer."
-            .to_string()
+        log_message(&format!(
+            "[tick llm] stream ended without any content (finish reason: {:?}, usage: {})",
+            finish_reason,
+            match &usage {
+                Some(usage) => format!(
+                    "{} prompt token(s), {} completion token(s)",
+                    usage.prompt_tokens, usage.completion_tokens
+                ),
+                None => "not reported".to_string(),
+            }
+        ));
+        match finish_reason {
+            Some(FinishReason::Length) => "No analysis returned by the LLM service: the token budget \
+(LLM max tokens in the settings) was exhausted before any answer text was generated - a reasoning model \
+spent it all on hidden thinking. Increase the budget or use a non-reasoning model."
+                .to_string(),
+            _ => "No analysis returned by the LLM service: the model ended its response without \
+generating any answer text. See the greppa-lsp log for the finish reason."
+                .to_string(),
+        }
     } else {
         // Log the raw response so that deviations from the requested
         // Markdown structure are visible in the log file.
@@ -605,14 +666,14 @@ fn build_analysis_request(
                 .build()?,
         ])
         // The response is a full Markdown document with code snippets, so
-        // it needs plenty of room. Hybrid reasoning ("thinking") models
-        // such as GLM generate a hidden chain-of-thought before the
-        // answer, and the token budget is shared between the two: with
-        // 4096 the reasoning alone exhausted the budget, so the stream
-        // ended without a single answer token and the panel showed "No
-        // analysis returned by the LLM service.". The budget is
-        // configurable (see llm_max_tokens) because the room a model
-        // needs depends on whether and how much it reasons.
+        // it needs plenty of room. Reasoning-heavy models generate a
+        // hidden chain-of-thought before the answer, and the token
+        // budget is shared between the two: with 4096 the reasoning
+        // alone exhausted the budget, so the stream ended without a
+        // single answer token and the panel showed "No analysis
+        // returned by the LLM service.". The budget is configurable
+        // (see llm_max_tokens) because the room a model needs depends
+        // on whether and how much it reasons.
         .max_tokens(llm_max_tokens())
         .temperature(0.1_f32)
         .top_p(0.8_f32)
