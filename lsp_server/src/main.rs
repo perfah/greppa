@@ -979,21 +979,39 @@ async fn run_tick(state: &ServerState, force: bool) {
                         match snapshot {
                             Some(snapshot) => {
                                 update_count += 1;
-                                last_markdown = snapshot.markdown;
-                                dirty = true;
+                                // An empty snapshot means the model has not
+                                // written any answer text yet: reasoning-heavy
+                                // models generate their hidden chain-of-thought
+                                // first, and those tokens arrive in a delta
+                                // field the OpenAI client does not surface, so
+                                // the accumulated document stays empty for the
+                                // whole reasoning phase. Writing the empty
+                                // document would replace the placeholder on
+                                // disk, and the IDE poller forwards the empty
+                                // content, which resets the panel to its "No
+                                // analysis yet" empty state - the analysis then
+                                // looks dead for the entire reasoning phase.
+                                // Skip the write instead: the placeholder stays
+                                // on disk and the panel keeps its loading
+                                // indication until the first real content
+                                // arrives.
+                                if !snapshot.markdown.is_empty() {
+                                    last_markdown = snapshot.markdown;
+                                    dirty = true;
 
-                                if last_write.map_or(true, |t| t.elapsed() >= STREAM_WRITE_INTERVAL) {
-                                    log_message(&format!(
-                                        "tick: writing streaming update {} for {} ({} chars)",
-                                        update_count,
-                                        uri,
-                                        last_markdown.chars().count()
-                                    ));
-                                    if let Err(e) = write_hints_file(&uri, &last_markdown) {
-                                        log_message(&format!("tick: failed to write analysis file: {}", e));
+                                    if last_write.map_or(true, |t| t.elapsed() >= STREAM_WRITE_INTERVAL) {
+                                        log_message(&format!(
+                                            "tick: writing streaming update {} for {} ({} chars)",
+                                            update_count,
+                                            uri,
+                                            last_markdown.chars().count()
+                                        ));
+                                        if let Err(e) = write_hints_file(&uri, &last_markdown) {
+                                            log_message(&format!("tick: failed to write analysis file: {}", e));
+                                        }
+                                        last_write = Some(Instant::now());
+                                        dirty = false;
                                     }
-                                    last_write = Some(Instant::now());
-                                    dirty = false;
                                 }
                             }
                             None => break,
