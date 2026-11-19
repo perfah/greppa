@@ -46,6 +46,21 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
     public String llmModel = "";
 
     /**
+     * Maximum number of tokens the LLM may generate for one analysis.
+     * The budget is shared between the answer and any hidden reasoning:
+     * reasoning-heavy models generate a long chain-of-thought before the
+     * answer, and when the budget is too small for both, the reasoning
+     * alone exhausts it - the analysis then ends with the "No analysis
+     * returned by the LLM service." fallback. Passed to the server as
+     * the GREPPA_LLM_MAX_TOKENS environment variable when the server is
+     * launched; a value of 0 or less leaves the variable unset so the
+     * Rust server's built-in default (16384) applies. Like the other
+     * LLM settings, a change takes effect the next time the LSP server
+     * is started.
+     */
+    public int llmMaxTokens = 16384;
+
+    /**
      * Free-text standing instructions for the LLM, e.g. style preferences
      * or constraints like "prefer functional style, never suggest unsafe
      * code". Injected into both the analysis and the completion prompts,

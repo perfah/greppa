@@ -108,6 +108,21 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
             commandLine.withEnvironment("GREPPA_LLM_API_KEY", llmApiKey);
             // The key itself is deliberately not logged.
         }
+        // The maximum number of tokens the LLM may generate for one
+        // analysis. The budget is shared between the answer and any
+        // hidden reasoning: reasoning-heavy models generate a long
+        // chain-of-thought before the answer, and when the budget is
+        // too small for both, the reasoning alone exhausts it - the
+        // analysis then ends with the "No analysis returned by the
+        // LLM service." fallback (see llm_max_tokens in
+        // tick_listener.rs). Only passed when positive: a
+        // non-positive value would make every analysis request fail,
+        // so the variable stays unset and the server's built-in
+        // default (16384) applies instead.
+        if (settings.llmMaxTokens > 0) {
+            commandLine.withEnvironment("GREPPA_LLM_MAX_TOKENS", String.valueOf(settings.llmMaxTokens));
+            LOG.info("Setting GREPPA_LLM_MAX_TOKENS to " + settings.llmMaxTokens);
+        }
         // The user's free-text standing instructions for the LLM. The Rust
         // server's prompt builders read GREPPA_LLM_GUIDELINE and inject
         // it into the analysis and completion prompts; an empty setting
