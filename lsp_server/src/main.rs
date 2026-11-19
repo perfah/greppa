@@ -1074,6 +1074,16 @@ async fn run_tick(state: &ServerState, force: bool) {
 /// processed exactly once. The poll interval matches the IDE-side
 /// hints poller (250 ms), so the perceived latency of a tab switch or
 /// a pause is at most a quarter second on top of the work itself.
+///
+/// The ticks this loop triggers run in the background, never inline in
+/// the loop: an analysis can run for minutes (a reasoning-heavy model
+/// reasons long before its first answer token), and awaiting it inline
+/// stopped the loop from polling, so every trigger written while an
+/// analysis ran - the Analyze button's included - sat unprocessed
+/// until the analysis finished, and the button appeared to do nothing.
+/// Spawned, the loop keeps polling: a new tick cancels the running one
+/// (see cancel_running_tick), and the duplicate check in run_tick
+/// skips ticks whose inputs were already analyzed.
 async fn watch_trigger_files(state: Arc<ServerState>) {
     let trigger_path = hints_dir().join("tick.trigger");
     let pause_path = hints_dir().join("pause.trigger");
@@ -1108,7 +1118,14 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
                         log_message("pause file: analyses resumed, re-analyzing the current file");
                         // Forced: the file content is unchanged since the
                         // pause, but the user expects a fresh analysis now.
-                        run_tick(&state, true).await;
+                        // Spawned, like every tick this loop triggers, so
+                        // the loop keeps polling while the analysis runs -
+                        // a pause written meanwhile must still be read
+                        // promptly.
+                        let tick_state = Arc::clone(&state);
+                        tokio::spawn(async move {
+                            run_tick(&tick_state, true).await;
+                        });
                     }
                 }
                 Err(e) => {
@@ -1227,7 +1244,19 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
                 // superseded request, and the new tick would otherwise
                 // wait on the semaphore until it finishes.
                 cancel_running_tick(&state);
-                run_tick(&state, params.force).await;
+                // The tick runs in the background, not inline: an
+                // analysis can run for minutes, and awaiting it here
+                // would stop the loop from polling - every trigger
+                // written while it runs (the Analyze button's included)
+                // would sit unprocessed until it finished, so pressing
+                // the button appeared to do nothing. Spawned, the loop
+                // keeps polling; the next iteration picks up whatever
+                // the IDE wrote meanwhile.
+                let force = params.force;
+                let tick_state = Arc::clone(&state);
+                tokio::spawn(async move {
+                    run_tick(&tick_state, force).await;
+                });
             }
             Err(e) => {
                 log_message(&format!("trigger file: failed to parse: {}", e));
