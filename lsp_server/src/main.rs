@@ -14,7 +14,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use logging_io::{log_message, LoggingRead, LoggingWrite};
+use logging_io::log_message;
 use tick_listener::OllamaTickListener;
 use serde::Deserialize;
 use tokio::sync::Semaphore;
@@ -689,17 +689,14 @@ async fn main() {
         }
     }
 
-    // The raw JSON-RPC traffic is observed through the logging wrappers
-    // from logging_io: every chunk read from stdin and written to
-    // stdout goes to the traffic log file and stderr, so the exact
-    // bytes of a request - the IDE's initialize request, for instance -
-    // can be replayed standalone against a server binary. Diagnostic
-    // wiring for the initialize crash investigation: the crash happens
-    // between the "Incoming LSP method" and "Handling initialize
-    // request" log lines, and the IDE's request bytes are the one
-    // input the passing standalone runs did not have.
-    let stdin = LoggingRead::new(tokio::io::stdin());
-    let stdout = LoggingWrite::new(tokio::io::stdout());
+    // The raw JSON-RPC traffic is deliberately not logged: the
+    // didOpen/didChange document sync sends the full text of every
+    // opened and edited file, so logging the traffic would fill the
+    // log with file content. A document event needs no more than its
+    // file's URI, which the did_open and did_change handlers below
+    // already log, so the log names every file without its content.
+    let stdin = tokio::io::stdin();
+    let stdout = tokio::io::stdout();
 
     let tick_listener: Arc<dyn StreamingTickListener> = Arc::new(OllamaTickListener::new());
 
