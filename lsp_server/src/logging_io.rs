@@ -6,6 +6,17 @@
 //! the log with file content. A document event needs no more than its
 //! file's URI, which the did_open and did_change handlers in main.rs
 //! already log.
+//!
+//! The log file is truncated at server start, never appended across
+//! sessions: under append mode the file grew past 500 MB, because one
+//! session's log is large on its own (every streaming update and the
+//! raw model response of every analysis are recorded) and the sessions
+//! stacked. Opening with truncate instead of append starts each server
+//! run from an empty file, so the log only ever holds one session and
+//! its size is bounded by that session. The handle is opened once (the
+//! LOG_FILE lazy static, on the first log message - the server's very
+//! first statement) and every message is written through it, so within
+//! the session nothing is lost.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -18,7 +29,13 @@ lazy_static::lazy_static! {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match OpenOptions::new().create(true).append(true).open(&path) {
+        // write+truncate, not append: the open itself resets the file to
+        // zero, so every server start begins with an empty log and the
+        // file never accumulates across sessions (see the module
+        // comment). The handle stays open for the process's lifetime
+        // and every message is written through it, so the session's own
+        // messages are all recorded.
+        match OpenOptions::new().create(true).write(true).truncate(true).open(&path) {
             Ok(file) => {
                 eprintln!("[logging_io] log file: {}", path.display());
                 Some(file)
