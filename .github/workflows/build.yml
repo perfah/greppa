@@ -75,10 +75,20 @@
 # downloaded, before the Gradle build, so the zips Gradle builds carry
 # it set in the first place (Gradle's zip tasks preserve Unix
 # permissions) - the publish job's Marketplace zip keeps it that way.
-# The plugin jobs also verify the artifact after the upload (see the
-# verification steps): a wrong upload path fails the build with the
-# actual artifact content in the log instead of shipping a zip that
-# fails in the IDE.
+# The plugin jobs also verify the layout after the build (see the
+# verification steps): the unpacked directory the upload step points
+# at is asserted to hold the plugin folder at its root, because
+# upload-artifact makes a single-directory path the artifact's root -
+# the directory's content is the artifact's content, so a wrong unpack
+# or zip layout fails the build with the actual content in the log
+# instead of shipping a zip that fails in the IDE. The verification
+# deliberately does not download the artifact back: the artifact list
+# a download consults is eventually consistent, and an artifact
+# uploaded seconds earlier in the same job was intermittently not yet
+# visible, which failed the build with "Artifact not found" although
+# the upload had succeeded. The release job still downloads both
+# artifacts when it re-zips them, so a broken artifact is caught
+# before anything ships.
 #
 # The release assets are the same entries re-zipped under versioned
 # names: the release job must produce single files and it only has the
@@ -241,23 +251,30 @@ jobs:
         with:
           name: greppa-rustrover
           path: jetbrains_plugin/rustrover/build/distributions/unpacked
-      # Verify what the artifact actually holds, by downloading it
-      # back: the artifact's content is exactly what GitHub's download
-      # button wraps, so asserting the layout here asserts what the
-      # IDE will see. The plugin folder must sit at the artifact's
-      # root; the ls line prints the actual root content, so a wrong
-      # upload path fails the build with the real layout in the log
-      # instead of shipping a zip that fails in the IDE.
-      - name: Download the uploaded artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: greppa-rustrover
-          path: artifact-check
+      # Verify the layout the artifact will have, on the unpacked
+      # directory the upload step above points at: upload-artifact
+      # makes a single-directory path the artifact's root, so the
+      # directory's content IS the artifact's content - asserting the
+      # layout here asserts what the IDE will see, and the ls line
+      # prints the actual root content, so a wrong unpack or zip
+      # layout fails the build with the real layout in the log instead
+      # of shipping a zip that fails in the IDE.
+      #
+      # This deliberately does NOT download the artifact back, the way
+      # this step originally did: the artifact list a download
+      # consults is eventually consistent, and an artifact uploaded
+      # seconds earlier in the same job was intermittently not yet
+      # visible, failing the build with "Artifact not found for name:
+      # greppa-rustrover" although the upload had succeeded - the
+      # FAQ's expiry and toolkit-version causes cannot apply seconds
+      # after a v4 upload. The release job still downloads both
+      # artifacts when it re-zips them, so a broken artifact is
+      # caught before anything ships.
       - name: Verify the plugin folder sits at the artifact root
         run: |
-          ls artifact-check
-          test -d artifact-check/rustrover/lib || { echo "artifact root does not hold rustrover/lib"; exit 1; }
-          test -d artifact-check/rustrover/bin || { echo "artifact root does not hold rustrover/bin"; exit 1; }
+          ls jetbrains_plugin/rustrover/build/distributions/unpacked
+          test -d jetbrains_plugin/rustrover/build/distributions/unpacked/rustrover/lib || { echo "artifact root does not hold rustrover/lib"; exit 1; }
+          test -d jetbrains_plugin/rustrover/build/distributions/unpacked/rustrover/bin || { echo "artifact root does not hold rustrover/bin"; exit 1; }
 
   plugin-intellij:
     name: Plugin (IntelliJ IDEA)
@@ -329,23 +346,15 @@ jobs:
         with:
           name: greppa-intellij
           path: jetbrains_plugin/idea/build/distributions/unpacked
-      # Verify what the artifact actually holds, by downloading it
-      # back: the artifact's content is exactly what GitHub's download
-      # button wraps, so asserting the layout here asserts what the
-      # IDE will see. The plugin folder must sit at the artifact's
-      # root; the ls line prints the actual root content, so a wrong
-      # upload path fails the build with the real layout in the log
-      # instead of shipping a zip that fails in the IDE.
-      - name: Download the uploaded artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: greppa-intellij
-          path: artifact-check
+      # The same layout verification as the rustrover job's step, on
+      # this subproject's unpacked directory; see that step's comment
+      # for why the artifact is verified locally instead of being
+      # downloaded back.
       - name: Verify the plugin folder sits at the artifact root
         run: |
-          ls artifact-check
-          test -d artifact-check/idea/lib || { echo "artifact root does not hold idea/lib"; exit 1; }
-          test -d artifact-check/idea/bin || { echo "artifact root does not hold idea/bin"; exit 1; }
+          ls jetbrains_plugin/idea/build/distributions/unpacked
+          test -d jetbrains_plugin/idea/build/distributions/unpacked/idea/lib || { echo "artifact root does not hold idea/lib"; exit 1; }
+          test -d jetbrains_plugin/idea/build/distributions/unpacked/idea/bin || { echo "artifact root does not hold idea/bin"; exit 1; }
 
   publish:
     name: Publish to JetBrains Marketplace
