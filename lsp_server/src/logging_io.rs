@@ -19,7 +19,7 @@
 //! the session nothing is lost.
 
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 

@@ -1,7 +1,7 @@
 use async_openai::config::OpenAIConfig;
 use async_openai::types::{
-    ChatCompletionRequestMessageArgs, CompletionUsage, CreateChatCompletionRequest,
-    CreateChatCompletionRequestArgs, FinishReason, Role,
+    ChatCompletionRequestMessageArgs, CreateChatCompletionRequest,
+    CreateChatCompletionRequestArgs, Role,
 };
 use async_openai::Client;
 use futures::StreamExt;
@@ -441,9 +441,9 @@ fn strip_repeated_prefix(prefix: &str, completion: &str) -> String {
 /// delta field the OpenAI client library does not expose, so the
 /// accumulated document stays empty for the whole reasoning phase -
 /// and when the stream then ends without any content, the finish
-/// reason and usage captured below say whether the token budget was
-/// exhausted by that reasoning or the model ended its turn without
-/// any answer text at all.
+/// reason captured below says whether the token budget was exhausted
+/// by that reasoning or the model ended its turn without any answer
+/// text at all.
 async fn run_ollama_work(
     file_content: &str,
     cursor_position: Option<Position>,
@@ -512,17 +512,25 @@ async fn run_ollama_work(
     // Whether the receiving tick was cancelled (a snapshot send failed
     // because the receiver was dropped), so the stream must be aborted.
     let mut receiver_dropped = false;
-    // The finish reason of the stream's last choice, and the token usage
-    // when the service reports one. They say WHY a stream can end
-    // without any answer text: FinishReason::Length means the token
+    // The finish reason of the stream's last choice, as the lowercase
+    // name the service reports ("stop", "length", ...). It says WHY a
+    // stream can end without any answer text: "length" means the token
     // budget was exhausted before the first answer token - a
     // reasoning-heavy model can spend all of it on hidden
     // chain-of-thought - while a stop without content means the model
     // ended its turn without writing any answer text at all. Without
-    // them, an empty stream was indistinguishable from a budget
+    // it, an empty stream was indistinguishable from a budget
     // exhaustion.
-    let mut finish_reason: Option<FinishReason> = None;
-    let mut usage: Option<CompletionUsage> = None;
+    //
+    // The value is captured through its Debug formatting rather than
+    // through the field's own type: the pinned async-openai 0.14
+    // exposes no FinishReason type to name (and its stream response
+    // carries no usage field either, which is why the token usage
+    // cannot be logged), and Debug is derived however the field is
+    // modeled - a plain string debugs with surrounding quotes, an
+    // enum variant debugs as its bare name, and trimming the quotes
+    // plus lowercasing yields the reported name either way.
+    let mut finish_reason: Option<String> = None;
 
     while let Some(result) = stream.next().await {
         let response = match result {
@@ -538,7 +546,8 @@ async fn run_ollama_work(
 
         for choice in response.choices {
             if let Some(reason) = choice.finish_reason {
-                finish_reason = Some(reason);
+                finish_reason =
+                    Some(format!("{:?}", reason).trim_matches('"').to_ascii_lowercase());
             }
             if let Some(content) = choice.delta.content {
                 if !content.is_empty() {
@@ -546,12 +555,6 @@ async fn run_ollama_work(
                     accumulated.push_str(&content);
                 }
             }
-        }
-        // The final chunk carries the inference's token usage on the
-        // services that report it; kept so the empty-stream case below
-        // can log what the budget was spent on.
-        if let Some(stream_usage) = response.usage {
-            usage = Some(stream_usage);
         }
 
         // Send the document accumulated so far at most every
@@ -595,22 +598,14 @@ async fn run_ollama_work(
     // thinking, and only a bigger budget or a non-reasoning model fixes
     // that - while any other finish reason means the model ended its
     // turn without writing any answer text at all, which no budget
-    // increase fixes. The usage line in the log shows what the budget
-    // was spent on when the service reports it.
+    // increase fixes.
     let final_markdown = if accumulated.is_empty() {
         log_message(&format!(
-            "[tick llm] stream ended without any content (finish reason: {:?}, usage: {})",
-            finish_reason,
-            match &usage {
-                Some(usage) => format!(
-                    "{} prompt token(s), {} completion token(s)",
-                    usage.prompt_tokens, usage.completion_tokens
-                ),
-                None => "not reported".to_string(),
-            }
+            "[tick llm] stream ended without any content (finish reason: {})",
+            finish_reason.as_deref().unwrap_or("not reported")
         ));
-        match finish_reason {
-            Some(FinishReason::Length) => "No analysis returned by the LLM service: the token budget \
+        match finish_reason.as_deref() {
+            Some("length") => "No analysis returned by the LLM service: the token budget \
 (LLM max tokens in the settings) was exhausted before any answer text was generated - a reasoning model \
 spent it all on hidden thinking. Increase the budget or use a non-reasoning model."
                 .to_string(),

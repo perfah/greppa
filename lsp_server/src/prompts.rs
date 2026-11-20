@@ -588,7 +588,6 @@ If there is nothing to suggest, write *No suggestions.* and omit all three ### s
 Start the document directly with its first ## heading. Never wrap the whole document, or any whole section, in a fenced code block or in BEGIN/END-style markers; only the individual code snippets and AI agent prompts described later may be fenced. \
 {topic_section}\
 {guideline_section}\n\
-
 The document must contain all sections below, in this order, each introduced by a ## heading with exactly the text afterwards:
 The text under each heading below tells you what to write; it is never content to copy into the document.
 Within the sections, format the content freely with Markdown: use **bold**, *italics*, ### subheadings, bullet and numbered lists, `inline code`, blockquotes and fenced code blocks. \
