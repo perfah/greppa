@@ -678,14 +678,39 @@ async fn main() {
     log_message(&format!("LLM base URL: {}", tick_listener::llm_base_url()));
     log_message(&format!("LLM model: {}", tick_listener::llm_model()));
 
-    // Clear any stale analysis files left over from a previous run so the UI
-    // does not show outdated content before the first tick.
+    // Clear the stale analysis files left over from a previous run so the
+    // UI does not show outdated content before the first tick - but spare
+    // the request trigger files (tick, pause, selection): the IDE writes
+    // them the moment the user clicks (Analyze, Pause/Unpause, a history
+    // selection), which can happen while this process is still starting
+    // up, and the previous whole-directory wipe destroyed such a request
+    // before the watcher below ever saw it - the first Analyze click of
+    // a session then did nothing, and the panel stayed on whatever
+    // status the button had set. The watcher processes whatever
+    // requests are waiting once it is up; only the displayed content is
+    // stale: the .md analysis files and the error file, plus the
+    // orphaned temporary files of interrupted writes.
     let hints_dir_path = hints_dir();
     if hints_dir_path.exists() {
-        if let Err(e) = fs::remove_dir_all(&hints_dir_path) {
-            log_message(&format!("Failed to clear old analysis directory: {}", e));
-        } else {
-            log_message(&format!("Cleared old analysis directory: {}", hints_dir_path.display()));
+        let mut cleared = false;
+        if let Ok(entries) = fs::read_dir(&hints_dir_path) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+                let is_request_trigger = matches!(
+                    name.as_deref(),
+                    Some("tick.trigger" | "pause.trigger" | "selection.trigger")
+                );
+                if !is_request_trigger && fs::remove_file(&path).is_ok() {
+                    cleared = true;
+                }
+            }
+        }
+        if cleared {
+            log_message(&format!(
+                "Cleared stale analysis files in {}",
+                hints_dir_path.display()
+            ));
         }
     }
 
@@ -1086,9 +1111,14 @@ async fn run_tick(state: &ServerState, force: bool) {
 ///   history entry must not spend LLM tokens.
 ///
 /// All files are deleted immediately after reading so each is
-/// processed exactly once. The poll interval matches the IDE-side
-/// hints poller (250 ms), so the perceived latency of a tab switch or
-/// a pause is at most a quarter second on top of the work itself.
+/// processed exactly once - except a tick trigger whose file is not
+/// synced yet: the LSP client sends didOpen only after the initialize
+/// handshake, and a trigger written during that window names a file
+/// the server has no text for, so the trigger is kept and retried on
+/// the next poll until the document arrives (see the tick handling
+/// below). The poll interval matches the IDE-side hints poller
+/// (250 ms), so the perceived latency of a tab switch or a pause is
+/// at most a quarter second on top of the work itself.
 ///
 /// The ticks this loop triggers run in the background, never inline in
 /// the loop: an analysis can run for minutes (a reasoning-heavy model
@@ -1107,6 +1137,10 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
         "Watching for trigger file at {}",
         trigger_path.display()
     ));
+    // The uri of the tick trigger currently waiting for its document to
+    // sync (see the tick handling in the loop), so the wait is logged
+    // once per episode instead of on every 250 ms poll.
+    let mut waiting_for_document: Option<String> = None;
 
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
@@ -1190,13 +1224,43 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
             Err(_) => continue,
         };
 
-        // Delete the trigger file immediately so it is processed exactly
-        // once, even if the tick below is skipped by the duplicate check.
-        let _ = fs::remove_file(&trigger_path);
-
         match serde_json::from_str::<TriggerFileParams>(&content) {
             Ok(params) => {
                 let uri = normalize_uri(&params.uri);
+
+                // The analyzed file's text is not synced yet: the LSP
+                // client sends didOpen only after the initialize
+                // handshake, and a trigger written during that window -
+                // the Analyze button is clickable the moment the tool
+                // window exists - names a file this server has no
+                // content for. Consuming the trigger anyway made run_tick
+                // drop the request with "no content", so the click did
+                // nothing and the panel stayed on the status the button
+                // had set. Keep the file and let the next poll retry:
+                // once didOpen has landed the tick runs with the
+                // document available, and the click self-heals instead
+                // of being lost. This also steps aside for another
+                // project's server: every project runs its own server
+                // and all of them poll this same trigger file, and
+                // only the server whose LSP client synced the file can
+                // analyze it.
+                if !state.documents.contains_key(&uri) {
+                    if waiting_for_document.as_deref() != Some(uri.as_str()) {
+                        log_message(&format!(
+                            "trigger file: {} is not synced yet, keeping the trigger and retrying on the next poll",
+                            uri
+                        ));
+                        waiting_for_document = Some(uri);
+                    }
+                    continue;
+                }
+                waiting_for_document = None;
+
+                // Delete the trigger file now that the request can be
+                // served, so it is processed exactly once - also when the
+                // tick below is skipped by the duplicate check.
+                let _ = fs::remove_file(&trigger_path);
+
                 log_message(&format!(
                     "trigger file: tick for {} (force: {})",
                     uri, params.force
@@ -1274,6 +1338,9 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
                 });
             }
             Err(e) => {
+                // A malformed trigger is deleted so it cannot be retried
+                // forever; the wait above only keeps triggers that parse.
+                let _ = fs::remove_file(&trigger_path);
                 log_message(&format!("trigger file: failed to parse: {}", e));
             }
         }

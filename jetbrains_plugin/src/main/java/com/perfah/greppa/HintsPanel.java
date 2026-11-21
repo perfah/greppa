@@ -72,6 +72,18 @@ public class HintsPanel extends JPanel {
     private static final String LINE_LINK_PREFIX = "greppa://lines/";
 
     /**
+     * The placeholder markdown the Rust server writes to the analysis
+     * file while an analysis generates (REVIEWING_MESSAGE in
+     * tick_listener.rs): a single italic line, so the panel shows a
+     * loading indication instead of the empty-state card until the
+     * first real content streams in. Compared against the document
+     * shown (see showStatus) so the status line describes the state
+     * the content is in: the placeholder means an analysis is
+     * generating, not loaded.
+     */
+    private static final String GENERATING_PLACEHOLDER = "_Generating analysis..._";
+
+    /**
      * Formats an analysis's completion time for its history combo label,
      * like "2026-11-05 23:57:42": the date and second the analysis was
      * completed, in the local time zone. Second, not minute, resolution:
@@ -552,14 +564,25 @@ public class HintsPanel extends JPanel {
      * re-run per keystroke. The selection also returns to the live view,
      * so the new analysis is watched as it streams in and the field stops
      * showing the focus of a previously selected analysis. The status
-     * label confirms that the focus was stored, because the field itself
-     * gives no apply feedback; the next refresh overwrites the label once
-     * the new analysis arrives.
+     * label confirms that an analysis was triggered - naming the focus
+     * when one is set, because the field itself gives no apply
+     * feedback; the next refresh overwrites the label once the analysis
+     * arrives.
      */
     private void applyTopic() {
         String topic = topicField.getText().trim();
         HintsService.setTopic(topic);
-        statusLabel.setText(topic.isBlank() ? "Focus cleared" : "Focus set: " + topic);
+        // The status names the action the click performs - an analysis was
+        // triggered - rather than the focus bookkeeping: "Focus cleared"
+        // read like the click did nothing, and when the analysis then
+        // failed to start (a trigger lost to the server's startup races;
+        // see HintsFilePoller.writeTriggerFile) there was no signal that
+        // anything was requested at all. The focus is named too when one
+        // is set, so applying a focus keeps its confirmation; the next
+        // refresh overwrites the label once the analysis arrives.
+        statusLabel.setText(topic.isBlank()
+                ? "Analysis triggered"
+                : "Analysis triggered through focus: " + topic);
         updatingHistoryCombo = true;
         if (historyCombo.getItemCount() > 0) {
             historyCombo.setSelectedIndex(0);
@@ -843,11 +866,27 @@ public class HintsPanel extends JPanel {
      * missing or partial analysis. It is shown in the same red as
      * the "Critical for understanding" heading so it stands out; the label
      * returns to its normal foreground once the server clears the error.
+     * While the shown document is still the server's generating
+     * placeholder, the label says "Generating analysis..." instead of
+     * "Analysis loaded", so the content and the status line never claim
+     * opposite things at once.
      */
     private void showStatus(String error, String markdown) {
         if (error.isBlank()) {
             statusLabel.setForeground(statusForeground);
-            statusLabel.setText(markdown.isBlank() ? " " : "Analysis loaded");
+            // The placeholder document means an analysis is generating, not
+            // loaded: the content area shows "Generating analysis..." and
+            // the status line used to say "Analysis loaded" at the same
+            // time, which read as done while no analysis existed yet. Only
+            // the first analysis of a file shows the placeholder - a
+            // re-analysis keeps the old document visible through the
+            // section merge (see HintsService.mergeDocuments), so it never
+            // hits this branch.
+            if (GENERATING_PLACEHOLDER.equals(markdown.trim())) {
+                statusLabel.setText("Generating analysis...");
+            } else {
+                statusLabel.setText(markdown.isBlank() ? " " : "Analysis loaded");
+            }
         } else {
             statusLabel.setForeground(CRITICAL_COLOR);
             statusLabel.setText("Error: " + error);
