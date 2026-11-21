@@ -540,18 +540,31 @@ public class HintsPanel extends JPanel {
     }
 
     /**
-     * Returns the combo label for an analysis: when it was completed
-     * and, when it was viewed through a focus, that focus - like
-     * "2026-11-05 23:57:42 - thread safety", or just
-     * "2026-11-05 23:57:42" for a focus-less analysis. The metadata
-     * travels with the history entry itself, recorded when the analysis
-     * completed (see HintsService.HistoryEntry).
+     * Returns the identifier an analysis is labeled with: when it was
+     * completed and, when it was viewed through a focus, that focus -
+     * like "2026-11-05 23:57:42 - thread safety", or just
+     * "2026-11-05 23:57:42" for a focus-less analysis. Shared by the
+     * history combo's entry labels (see historyEntryLabel) and the
+     * Analyze button's status confirmation (see applyTopic), so the
+     * click's confirmation names the analysis the same way the history
+     * will, and the two can never drift apart.
+     */
+    private static String historyIdentifier(long completedAt, String focus) {
+        String timestamp = HISTORY_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(completedAt));
+        return focus.isBlank()
+                ? timestamp
+                : timestamp + " - " + focus;
+    }
+
+    /**
+     * Returns the combo label for an analysis: its identifier (see
+     * historyIdentifier) - when it was completed and, when it was viewed
+     * through a focus, that focus. The metadata travels with the history
+     * entry itself, recorded when the analysis completed (see
+     * HintsService.HistoryEntry).
      */
     private static String historyEntryLabel(HintsService.HistoryEntry entry) {
-        String timestamp = HISTORY_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(entry.completedAt()));
-        return entry.focus().isBlank()
-                ? timestamp
-                : timestamp + " - " + entry.focus();
+        return historyIdentifier(entry.completedAt(), entry.focus());
     }
 
     /**
@@ -564,25 +577,30 @@ public class HintsPanel extends JPanel {
      * re-run per keystroke. The selection also returns to the live view,
      * so the new analysis is watched as it streams in and the field stops
      * showing the focus of a previously selected analysis. The status
-     * label confirms that an analysis was triggered - naming the focus
-     * when one is set, because the field itself gives no apply
-     * feedback; the next refresh overwrites the label once the analysis
-     * arrives.
+     * label confirms that an analysis was triggered, naming it by the
+     * same identifier the history will label it with (see
+     * historyIdentifier) - the click's timestamp plus the applied focus -
+     * so the confirmation and the eventual history entry read as the
+     * same analysis; the next refresh overwrites the label once the
+     * analysis arrives.
      */
     private void applyTopic() {
         String topic = topicField.getText().trim();
         HintsService.setTopic(topic);
-        // The status names the action the click performs - an analysis was
-        // triggered - rather than the focus bookkeeping: "Focus cleared"
-        // read like the click did nothing, and when the analysis then
-        // failed to start (a trigger lost to the server's startup races;
-        // see HintsFilePoller.writeTriggerFile) there was no signal that
-        // anything was requested at all. The focus is named too when one
-        // is set, so applying a focus keeps its confirmation; the next
-        // refresh overwrites the label once the analysis arrives.
-        statusLabel.setText(topic.isBlank()
-                ? "Analysis triggered"
-                : "Analysis triggered through focus: " + topic);
+        // The status names the analysis the same way the history combo
+        // will (see historyIdentifier): the click's timestamp plus the
+        // applied focus. The history entry's timestamp is recorded when
+        // the analysis completes (see
+        // HintsService.completeMarkdownForUri), so it is slightly later
+        // than this one; the focus part matches exactly. Naming the
+        // analysis - rather than the focus bookkeeping alone ("Focus
+        // cleared" read like the click did nothing) - also leaves a
+        // signal when the analysis then fails to start (a trigger lost to
+        // the server's startup races; see
+        // HintsFilePoller.writeTriggerFile): the label stays on this
+        // confirmation instead of advancing to a loaded analysis.
+        statusLabel.setText("Analysis triggered: "
+                + historyIdentifier(System.currentTimeMillis(), topic));
         updatingHistoryCombo = true;
         if (historyCombo.getItemCount() > 0) {
             historyCombo.setSelectedIndex(0);
