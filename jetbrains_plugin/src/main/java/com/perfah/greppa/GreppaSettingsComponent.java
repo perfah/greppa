@@ -113,9 +113,12 @@ public class GreppaSettingsComponent {
      * Toggles the Etc tab (see GreppaSettingsState.showEtcTab): the
      * catch-all tab showing the analysis sections no other tab's filter
      * catches. A checkbox with its own label rather than a labeled form
-     * row, like the refresh toggles.
+     * row, like the refresh toggles. The label marks the setting as the
+     * debugging aid it is: a correctly generated analysis leaves the
+     * tab empty, so it is off by default and enabled to inspect the
+     * headings a model actually wrote.
      */
-    private final JBCheckBox showEtcTabField = new JBCheckBox("Show the Etc tab");
+    private final JBCheckBox showEtcTabField = new JBCheckBox("Show the Etc tab (debugging)");
     /** The section checkboxes by section key, built from SECTIONS in document order. */
     private final Map<String, JBCheckBox> sectionCheckBoxes = new LinkedHashMap<>();
 
