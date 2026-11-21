@@ -62,7 +62,9 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         // shows the sections none of the three filters catches (see
         // HintsService.filterUnmatchedSections), so the headings the
         // server actually writes are visible when a tab seems to be
-        // missing its section.
+        // missing its section; it is off by default and enabled in the
+        // settings (see GreppaSettingsState.showEtcTab), because a
+        // correctly generated analysis leaves it empty.
         List<String> interpretSectionNames = interpretSections();
         HintsPanel interpretPanel = new HintsPanel(interpretSectionNames);
         Content interpretContent = ContentFactory.getInstance()
@@ -79,23 +81,34 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         Content relateContent = ContentFactory.getInstance()
                 .createContent(buildRelateTab(importsPanel, relatePanel), "Relate", false);
 
-        // The Etc tab's filter is the complement of the three lists above,
-        // derived from them so it cannot drift when a list is adjusted:
-        // every ## section whose heading matches none of them appears
-        // here. When the server writes a heading a tab's list does not
-        // contain (the match is a substring test; see
+        // The Etc tab, only when the settings enable it (see
+        // GreppaSettingsState.showEtcTab). The setting is read here,
+        // once, because the tool window content is created once per
+        // project: the tab appears or disappears the next time the
+        // content is built - after the IDE is restarted, or the project
+        // reopened. The tab's filter is the complement of the three
+        // lists above, derived from them so it cannot drift when a list
+        // is adjusted: every ## section whose heading matches none of
+        // them appears here. When the server writes a heading a tab's
+        // list does not contain (the match is a substring test; see
         // HintsService.headingMatches), the section shows up in Etc
         // instead of the tab it was meant for.
-        List<String> matchedSectionNames = new ArrayList<>(interpretSectionNames);
-        matchedSectionNames.addAll(improveSectionNames);
-        matchedSectionNames.addAll(relateSectionNames);
-        HintsPanel etcPanel = new HintsPanel(matchedSectionNames, true);
-        Content etcContent = ContentFactory.getInstance().createContent(etcPanel, "Etc", false);
+        HintsPanel etcPanel = null;
+        Content etcContent = null;
+        if (GreppaSettingsState.getInstance().showEtcTab) {
+            List<String> matchedSectionNames = new ArrayList<>(interpretSectionNames);
+            matchedSectionNames.addAll(improveSectionNames);
+            matchedSectionNames.addAll(relateSectionNames);
+            etcPanel = new HintsPanel(matchedSectionNames, true);
+            etcContent = ContentFactory.getInstance().createContent(etcPanel, "Etc", false);
+        }
 
         toolWindow.getContentManager().addContent(interpretContent);
         toolWindow.getContentManager().addContent(improveContent);
         toolWindow.getContentManager().addContent(relateContent);
-        toolWindow.getContentManager().addContent(etcContent);
+        if (etcContent != null) {
+            toolWindow.getContentManager().addContent(etcContent);
+        }
 
         // The title bar holds only the settings action. The reload action
         // was removed as redundant with the panels' Refresh button (next
@@ -115,12 +128,15 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         // removed nothing and the panels kept receiving notifications
         // forever after their content was removed. The panels do not
         // register themselves either, so each update refreshes them exactly once.
-        List<Runnable> refreshListeners = List.of(
+        // The Etc panel joins only when the tab was created above.
+        List<Runnable> refreshListeners = new ArrayList<>(List.of(
                 interpretPanel::refresh,
                 importsPanel::refresh,
                 improvePanel::refresh,
-                relatePanel::refresh,
-                etcPanel::refresh);
+                relatePanel::refresh));
+        if (etcPanel != null) {
+            refreshListeners.add(etcPanel::refresh);
+        }
         for (Runnable listener : refreshListeners) {
             HintsService.addListener(listener);
         }

@@ -109,6 +109,13 @@ public class GreppaSettingsComponent {
      * toggle.
      */
     private final JBCheckBox refreshOnOpenField = new JBCheckBox("Refresh analysis on open");
+    /**
+     * Toggles the Etc tab (see GreppaSettingsState.showEtcTab): the
+     * catch-all tab showing the analysis sections no other tab's filter
+     * catches. A checkbox with its own label rather than a labeled form
+     * row, like the refresh toggles.
+     */
+    private final JBCheckBox showEtcTabField = new JBCheckBox("Show the Etc tab");
     /** The section checkboxes by section key, built from SECTIONS in document order. */
     private final Map<String, JBCheckBox> sectionCheckBoxes = new LinkedHashMap<>();
 
@@ -160,28 +167,38 @@ public class GreppaSettingsComponent {
                         + "The refresh also runs when the file content is unchanged - e.g. after moving only the cursor - "
                         + "so the analysis reflects the current caret. Takes effect immediately; no restart needed.");
 
+        showEtcTabField.setToolTipText(
+                "Show an Etc tab with the analysis sections no other tab displays - useful to inspect "
+                        + "the headings the server actually wrote when a section seems to be missing from its tab. "
+                        + "Takes effect after the IDE is restarted (the tool window is recreated).");
+
         for (Section section : SECTIONS) {
             JBCheckBox checkBox = new JBCheckBox(section.label());
             checkBox.setToolTipText(section.tooltip());
             sectionCheckBoxes.put(section.key(), checkBox);
         }
 
-        // The restart note for the server settings. Every setting except
-        // the save-refresh toggle is passed to the server as an
+        // The restart note for the settings that cannot apply while the
+        // current session keeps running. Every setting except the
+        // save-refresh toggle is passed to the server as an
         // environment variable when the server is launched (see
         // GreppaLspServerDescriptor.createCommandLine), and a running
         // process's environment never changes, so those settings cannot
-        // take effect while the current server keeps running. One note at
-        // the bottom instead of a sentence in every tooltip, and it names
-        // the actionable instruction (restart the IDE) rather than the
-        // mechanism ("the next time the server is started"). The
-        // save-refresh toggle is the exception named in the note: the
-        // IDE's save listeners read it when the save events fire (see
-        // GreppaProjectActivity), so it applies immediately. The
-        // open-refresh toggle straddles the two: the server's own
-        // on-open tick follows its environment variable (after the
-        // restart), while the IDE's tab-selection listener reads the
-        // setting when the selection changes (see
+        // take effect while the current server keeps running. The Etc tab
+        // toggle is IDE-side but joins them in the note: the tool
+        // window's content is built once per project (see
+        // HintsToolWindowFactory), so the tab appears or disappears the
+        // next time that happens - after the IDE is restarted, or the
+        // project reopened. One note at the bottom instead of a sentence
+        // in every tooltip, and it names the actionable instruction
+        // (restart the IDE) rather than the mechanism ("the next time
+        // the server is started"). The save-refresh toggle is the
+        // exception named in the note: the IDE's save listeners read it
+        // when the save events fire (see GreppaProjectActivity), so it
+        // applies immediately. The open-refresh toggle straddles the
+        // two: the server's own on-open tick follows its environment
+        // variable (after the restart), while the IDE's tab-selection
+        // listener reads the setting when the selection changes (see
         // LspTabSelectionListener), so that half applies immediately -
         // which the note and the toggle's tooltip both say. Rendered in
         // the context-help color so it reads as a note, not as another
@@ -189,7 +206,7 @@ public class GreppaSettingsComponent {
         // JBLabel.setFontColor: in this IDE build setFontColor takes the
         // new UI's FontColor type, not a java.awt.Color.
         JBLabel restartNote = new JBLabel(
-                "The server settings take effect after the IDE is restarted; the save-refresh toggle applies immediately, and so does the open-refresh toggle for tab switches.");
+                "The server settings and the Etc tab toggle take effect after the IDE is restarted; the save-refresh toggle applies immediately, and so does the open-refresh toggle for tab switches.");
         restartNote.setForeground(UIUtil.getContextHelpForeground());
 
         // The section checkboxes grouped by the tool window tab that
@@ -212,6 +229,7 @@ public class GreppaSettingsComponent {
                 .addLabeledComponent("Min. chars changed for auto-refresh:", autoUpdateMinCharsField, 1, false)
                 .addComponent(refreshOnOpenField)
                 .addComponent(refreshOnSaveField)
+                .addComponent(showEtcTabField)
                 .addComponent(sectionsHeader)
                 .addComponent(sectionsPanel)
                 .addComponent(restartNote)
@@ -261,7 +279,7 @@ public class GreppaSettingsComponent {
                     perTab.get(tab));
         }
         addSectionGroup(sectionsPanel, "Etc",
-                "Sections shown in the Etc tab of the Greppa tool window.", etc);
+                "Sections shown in the Etc tab of the Greppa tool window, when that tab is enabled.", etc);
     }
 
     /**
@@ -403,5 +421,15 @@ public class GreppaSettingsComponent {
     /** Sets the shown save-refresh toggle. */
     public void setRefreshOnSave(boolean refreshOnSave) {
         refreshOnSaveField.setSelected(refreshOnSave);
+    }
+
+    /** Returns whether the Etc tab is shown; see GreppaSettingsState.showEtcTab. */
+    public boolean isShowEtcTab() {
+        return showEtcTabField.isSelected();
+    }
+
+    /** Sets the shown Etc tab toggle. */
+    public void setShowEtcTab(boolean showEtcTab) {
+        showEtcTabField.setSelected(showEtcTab);
     }
 }

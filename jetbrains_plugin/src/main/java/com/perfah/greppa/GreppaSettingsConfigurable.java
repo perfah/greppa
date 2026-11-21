@@ -32,7 +32,8 @@ public class GreppaSettingsConfigurable implements Configurable {
                 || !settingsComponent.getDisabledSections().equals(settings.disabledSections)
                 || settingsComponent.getAutoUpdateMinChars() != settings.autoUpdateMinChars
                 || settingsComponent.isRefreshOnOpen() != settings.refreshOnOpen
-                || settingsComponent.isRefreshOnSave() != settings.refreshOnSave;
+                || settingsComponent.isRefreshOnSave() != settings.refreshOnSave
+                || settingsComponent.isShowEtcTab() != settings.showEtcTab;
     }
 
     @Override
@@ -47,6 +48,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         settings.autoUpdateMinChars = settingsComponent.getAutoUpdateMinChars();
         settings.refreshOnOpen = settingsComponent.isRefreshOnOpen();
         settings.refreshOnSave = settingsComponent.isRefreshOnSave();
+        settings.showEtcTab = settingsComponent.isShowEtcTab();
     }
 
     @Override
@@ -67,6 +69,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         settingsComponent.setAutoUpdateMinChars(Math.max(0, settings.autoUpdateMinChars));
         settingsComponent.setRefreshOnOpen(settings.refreshOnOpen);
         settingsComponent.setRefreshOnSave(settings.refreshOnSave);
+        settingsComponent.setShowEtcTab(settings.showEtcTab);
     }
 
     @Override

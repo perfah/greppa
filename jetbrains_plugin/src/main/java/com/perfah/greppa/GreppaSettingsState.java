@@ -83,8 +83,8 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * the settings, comma-separated; empty (the default) means every
      * section is enabled. The settings' checkboxes produce the keys (see
      * GreppaSettingsComponent.SECTIONS); passed to the LSP server as the
-     * GREPPA_DISABLED_SECTIONS environment variable when the server is
-     * launched, the Rust prompt builder omits the disabled sections'
+     * GREPPA_DISABLED_SECTIONS environment variable when the LSP server
+     * is launched, the Rust prompt builder omits the disabled sections'
      * instructions so the analysis document contains only the enabled
      * sections. Unknown keys are ignored. Like the other LLM settings, a
      * change takes effect the next time the LSP server is started.
@@ -134,6 +134,20 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
      * files must not spend tokens unless the user opts in.
      */
     public boolean refreshOnOpen = false;
+
+    /**
+     * Whether the tool window shows the Etc tab: the catch-all tab that
+     * displays the ## sections of the analysis document none of the
+     * Interpret, Improve and Relate filters catches (see
+     * HintsToolWindowFactory). Read once when the tool window content is
+     * created, so a change applies the next time that content is built -
+     * after the IDE is restarted, or the project reopened. Default off:
+     * the three main tabs are the product, and a correctly generated
+     * analysis leaves the Etc tab empty, so the tab is noise for a
+     * working setup; it is enabled to inspect the headings a model
+     * actually wrote when a section seems to be missing from its tab.
+     */
+    public boolean showEtcTab = false;
 
     /**
      * Whether the tool window has displayed an analysis at least once,
