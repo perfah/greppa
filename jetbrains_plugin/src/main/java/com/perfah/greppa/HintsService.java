@@ -54,8 +54,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * The service also keeps a bounded history of each file's analyses (see
  * completeMarkdownForUri and getHistoryForUri): every finished analysis
- * becomes an entry, newest first, carrying its completion metadata - when
- * the analysis was completed and the focus it was viewed through (see
+ * becomes an entry, newest first, carrying its trigger metadata - when
+ * the analysis was triggered and the focus it was viewed through (see
  * HistoryEntry) - which the history combo labels the entries with. The
  * newest entry is the file's current analysis and the merge base that the
  * next analysis of the file streams into; there is no separate current
@@ -99,11 +99,21 @@ public class HintsService {
      * differs from the file's newest one, so the list contains exactly
      * the analyses the file had, in order. The first entry is the file's
      * current analysis and the merge base that the next analysis streams
-     * into. Each entry carries its completion metadata, which the
-     * history combo labels it with (see HintsPanel.historyEntryLabel).
+     * into. Each entry carries its trigger metadata, which the history
+     * combo labels it with (see HintsPanel.historyEntryLabel).
      * In-memory only, like the documents themselves.
      */
     private static final Map<String, List<HistoryEntry>> historyByUri = new ConcurrentHashMap<>();
+    /**
+     * When each file's current analysis was triggered, per normalized
+     * URI: the moment the IDE wrote the trigger file (see
+     * HintsFilePoller.writeTriggerFile, which records it). Consumed by
+     * completeMarkdownForUri as the new history entry's timestamp, so the
+     * entry carries the analysis's trigger time - the same timestamp the
+     * Analyze click's status label names the analysis with (see
+     * HintsPanel.applyTopic) - instead of the later completion time.
+     */
+    private static final Map<String, Long> triggeredAtByUri = new ConcurrentHashMap<>();
     /**
      * The import entries of a file for the Imports pane, per normalized
      * URI: the entries the local import scan produced (see ImportDetector)
@@ -169,29 +179,79 @@ public class HintsService {
      * it becomes the merge base that the next analysis of the file
      * streams into. A document identical to the newest entry adds
      * nothing - the poller's forcePoll re-reads unchanged files on every
-     * Analyze click - so the existing entry and its recorded completion
+     * Analyze click - so the existing entry and its recorded trigger
      * time are kept.
      *
-     * The entry records the analysis's completion metadata: it was
-     * completed now, viewed through the focus that is currently set
-     * (empty when none is) - the data the history combo labels the entry
-     * with (see HintsPanel.historyEntryLabel).
+     * The entry records the analysis's trigger metadata: it was triggered
+     * at the time the IDE wrote the trigger file (see
+     * noteAnalysisTriggered - the same timestamp the Analyze click's
+     * status label names the analysis with), viewed through the focus
+     * that is currently set (empty when none is) - the data the history
+     * combo labels the entry with (see HintsPanel.historyEntryLabel). A
+     * completion without a recorded trigger - a server-initiated
+     * analysis, e.g. the refresh-on-open tick, the auto-refresh on
+     * edits or resuming a pause - falls back to now, the completion
+     * moment.
      */
     public static synchronized void completeMarkdownForUri(String uri, String markdown) {
         String normalized = normalizeUri(uri);
         LOG.debug("HintsService.completeMarkdownForUri: raw=" + uri + " normalized=" + normalized
                 + " chars=" + (markdown == null ? 0 : markdown.length()));
         String content = markdown == null ? "" : markdown;
+        // The entry's timestamp is the analysis's trigger time - the
+        // moment the IDE wrote the trigger file (see
+        // noteAnalysisTriggered) - so the history labels the analysis
+        // with the same timestamp the Analyze click's status label names
+        // it with. The recorded time is consumed here whatever happens
+        // below, so it cannot leak into a later analysis of the file; a
+        // completion without a recorded trigger falls back to now, the
+        // completion moment.
+        Long triggeredAt = triggeredAtByUri.remove(normalized);
+        long entryTime = triggeredAt == null ? System.currentTimeMillis() : triggeredAt;
         List<HistoryEntry> analyses = historyByUri.computeIfAbsent(normalized, key -> new ArrayList<>());
         boolean unchanged = !analyses.isEmpty() && analyses.get(0).markdown().equals(content);
         if (!unchanged) {
-            analyses.add(0, new HistoryEntry(content, System.currentTimeMillis(), currentFocus()));
+            analyses.add(0, new HistoryEntry(content, entryTime, currentFocus()));
             if (analyses.size() > MAX_HISTORY) {
                 analyses.remove(analyses.size() - 1);
             }
         }
         latestByUri.put(normalized, content);
         notifyListenersIfCurrentFile(normalized);
+    }
+
+    /**
+     * Records that the file's analysis was triggered now: the moment the
+     * IDE wrote the trigger file (see HintsFilePoller.writeTriggerFile,
+     * which calls this). The file's next completion consumes the recorded
+     * time as its history entry's timestamp (see
+     * completeMarkdownForUri); a null uri records nothing. Overwrites a
+     * previously recorded time, so the next completion always carries
+     * the file's newest trigger's time.
+     */
+    public static void noteAnalysisTriggered(@Nullable String uri) {
+        if (uri == null) {
+            return;
+        }
+        String normalized = normalizeUri(uri);
+        triggeredAtByUri.put(normalized, System.currentTimeMillis());
+        LOG.debug("HintsService.noteAnalysisTriggered: " + normalized);
+    }
+
+    /**
+     * Returns when the file's analysis was triggered (see
+     * noteAnalysisTriggered), or now when no trigger is recorded for it -
+     * no trigger file was written, or its write failed. Used by the
+     * Analyze click's status label so it names the analysis with exactly
+     * the timestamp the history entry will carry (see
+     * HintsPanel.applyTopic).
+     */
+    public static long getAnalysisTriggeredAt(@Nullable String uri) {
+        if (uri == null) {
+            return System.currentTimeMillis();
+        }
+        Long triggeredAt = triggeredAtByUri.get(normalizeUri(uri));
+        return triggeredAt == null ? System.currentTimeMillis() : triggeredAt;
     }
 
     /**
@@ -208,7 +268,7 @@ public class HintsService {
 
     /**
      * Returns the analyses of the given file as history entries - the
-     * Markdown document plus its completion metadata (see HistoryEntry) -
+     * Markdown document plus its trigger metadata (see HistoryEntry) -
      * newest first, or an empty list when there are none (including a
      * null uri). The first entry is the file's current analysis. A copy
      * is returned, so callers can iterate safely while a new analysis
@@ -266,8 +326,8 @@ public class HintsService {
     /**
      * Returns the import entries stored for the file, or null when the
      * imports were never scanned (which is distinct from an empty scan
-     * result). A copy is returned, so callers can iterate safely while
-     * a re-scan updates the list.
+     * result). A copy is returned, so callers can iterate safely while a
+     * re-scan updates the list.
      */
     public static synchronized List<ImportEntry> getImportsForUri(String uri) {
         if (uri == null) {
@@ -393,7 +453,7 @@ public class HintsService {
     /**
      * Returns the focus (topic/goal) currently set, trimmed, or the empty
      * string when none is; recorded as the focus part of an analysis's
-     * completion metadata (see completeMarkdownForUri).
+     * trigger metadata (see completeMarkdownForUri).
      */
     private static String currentFocus() {
         String focus = topic;
@@ -824,13 +884,13 @@ public class HintsService {
 
     /**
      * One completed analysis: its Markdown document plus the metadata
-     * the history combo labels it with - when it was completed and the
+     * the history combo labels it with - when it was triggered and the
      * focus (topic/goal) it was viewed through. Immutable: the service
      * prepends entries to the history but never rewrites them, so an
      * entry keeps the metadata of when the analysis was actually
-     * generated.
+     * triggered.
      */
-    public record HistoryEntry(String markdown, long completedAt, String focus) {}
+    public record HistoryEntry(String markdown, long triggeredAt, String focus) {}
 
     /**
      * One row of the Imports pane: a local file the scan found (manual =

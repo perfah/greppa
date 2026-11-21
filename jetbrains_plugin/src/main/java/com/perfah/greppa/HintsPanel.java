@@ -84,12 +84,12 @@ public class HintsPanel extends JPanel {
     private static final String GENERATING_PLACEHOLDER = "_Generating analysis..._";
 
     /**
-     * Formats an analysis's completion time for its history combo label,
+     * Formats an analysis's trigger time for its history combo label,
      * like "2026-11-05 23:57:42": the date and second the analysis was
-     * completed, in the local time zone. Second, not minute, resolution:
-     * two analyses of a file can complete within the same minute (two
-     * quick saves, for instance), and minute-identical labels made two
-     * distinct analyses look like the same entry twice.
+     * triggered, in the local time zone. Second, not minute, resolution:
+     * two analyses of a file can be triggered within the same minute
+     * (two quick saves, for instance), and minute-identical labels made
+     * two distinct analyses look like the same entry twice.
      */
     private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
@@ -135,7 +135,7 @@ public class HintsPanel extends JPanel {
 
     /**
      * Lists the analyses of the selected file, newest first, each
-     * labeled with when it was completed and the focus it was viewed
+     * labeled with when it was triggered and the focus it was viewed
      * through (see historyEntryLabel). The newest entry is selected by
      * default and shows the live document - the newest analysis, merged
      * with the partial one while the next analysis streams in; selecting
@@ -508,7 +508,7 @@ public class HintsPanel extends JPanel {
         JPanel panel = new JPanel(new BorderLayout(4, 0));
         panel.add(new JLabel("History:"), BorderLayout.WEST);
         historyCombo.setToolTipText(
-                "The analyses of the current file, newest first, labeled with when each was completed and the focus it was viewed through. The newest shows the live document, including the next analysis as it streams in; selecting a previous one shows that analysis and fills the focus field with its focus.");
+                "The analyses of the current file, newest first, labeled with when each was triggered and the focus it was viewed through. The newest shows the live document, including the next analysis as it streams in; selecting a previous one shows that analysis and fills the focus field with its focus.");
         historyCombo.addActionListener(e -> {
             if (updatingHistoryCombo) {
                 return;
@@ -541,7 +541,7 @@ public class HintsPanel extends JPanel {
 
     /**
      * Returns the identifier an analysis is labeled with: when it was
-     * completed and, when it was viewed through a focus, that focus -
+     * triggered and, when it was viewed through a focus, that focus -
      * like "2026-11-05 23:57:42 - thread safety", or just
      * "2026-11-05 23:57:42" for a focus-less analysis. Shared by the
      * history combo's entry labels (see historyEntryLabel) and the
@@ -549,8 +549,8 @@ public class HintsPanel extends JPanel {
      * click's confirmation names the analysis the same way the history
      * will, and the two can never drift apart.
      */
-    private static String historyIdentifier(long completedAt, String focus) {
-        String timestamp = HISTORY_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(completedAt));
+    private static String historyIdentifier(long triggeredAt, String focus) {
+        String timestamp = HISTORY_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(triggeredAt));
         return focus.isBlank()
                 ? timestamp
                 : timestamp + " - " + focus;
@@ -558,13 +558,13 @@ public class HintsPanel extends JPanel {
 
     /**
      * Returns the combo label for an analysis: its identifier (see
-     * historyIdentifier) - when it was completed and, when it was viewed
+     * historyIdentifier) - when it was triggered and, when it was viewed
      * through a focus, that focus. The metadata travels with the history
-     * entry itself, recorded when the analysis completed (see
+     * entry itself, recorded when the analysis was triggered (see
      * HintsService.HistoryEntry).
      */
     private static String historyEntryLabel(HintsService.HistoryEntry entry) {
-        return historyIdentifier(entry.completedAt(), entry.focus());
+        return historyIdentifier(entry.triggeredAt(), entry.focus());
     }
 
     /**
@@ -579,35 +579,39 @@ public class HintsPanel extends JPanel {
      * showing the focus of a previously selected analysis. The status
      * label confirms that an analysis was triggered, naming it by the
      * same identifier the history will label it with (see
-     * historyIdentifier) - the click's timestamp plus the applied focus -
-     * so the confirmation and the eventual history entry read as the
-     * same analysis; the next refresh overwrites the label once the
-     * analysis arrives.
+     * historyIdentifier): pollNow's trigger write runs synchronously
+     * (this method is on the EDT) and records the trigger timestamp (see
+     * HintsFilePoller.writeTriggerFile), the label reads that exact
+     * timestamp back, and the history entry consumes the same recorded
+     * time when the analysis completes (see
+     * HintsService.completeMarkdownForUri) - so the confirmation and the
+     * eventual history entry show the same timestamp, where before the
+     * entry recorded its completion time, minutes later for a
+     * reasoning-heavy model. The next refresh overwrites the label once
+     * the analysis arrives.
      */
     private void applyTopic() {
         String topic = topicField.getText().trim();
         HintsService.setTopic(topic);
-        // The status names the analysis the same way the history combo
-        // will (see historyIdentifier): the click's timestamp plus the
-        // applied focus. The history entry's timestamp is recorded when
-        // the analysis completes (see
-        // HintsService.completeMarkdownForUri), so it is slightly later
-        // than this one; the focus part matches exactly. Naming the
-        // analysis - rather than the focus bookkeeping alone ("Focus
-        // cleared" read like the click did nothing) - also leaves a
-        // signal when the analysis then fails to start (a trigger lost to
-        // the server's startup races; see
-        // HintsFilePoller.writeTriggerFile): the label stays on this
-        // confirmation instead of advancing to a loaded analysis.
-        statusLabel.setText("Analysis triggered: "
-                + historyIdentifier(System.currentTimeMillis(), topic));
         updatingHistoryCombo = true;
         if (historyCombo.getItemCount() > 0) {
             historyCombo.setSelectedIndex(0);
         }
         updatingHistoryCombo = false;
         refresh();
+        // Before the label: pollNow writes the trigger file synchronously
+        // (this method runs on the EDT) and the write records the trigger
+        // timestamp, so reading it back afterwards labels the click with
+        // exactly the timestamp the history entry will carry - a second
+        // clock reading here could land on the next second at a boundary.
+        // The label also leaves a signal when the analysis then fails to
+        // start (a trigger lost to the server's startup races; see
+        // HintsFilePoller.writeTriggerFile): it stays on this
+        // confirmation instead of advancing to a loaded analysis.
         HintsFilePoller.pollNow();
+        String uri = HintsService.getCurrentFileUri();
+        long triggeredAt = HintsService.getAnalysisTriggeredAt(uri);
+        statusLabel.setText("Analysis triggered: " + historyIdentifier(triggeredAt, topic));
     }
 
     /**

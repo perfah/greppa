@@ -286,10 +286,15 @@ public class HintsFilePoller implements Runnable {
      * Analyze button always produces a new analysis.
      *
      * The current file and its caret position are resolved on the EDT
-     * (FileEditorManager access).
+     * (FileEditorManager access). The request runs immediately when
+     * already on the EDT - the Analyze button's click is - so the
+     * trigger timestamp the write records (see
+     * HintsService.noteAnalysisTriggered) exists by the time applyTopic
+     * reads it back for its status label; from any other thread it is
+     * queued onto the EDT as before.
      */
     private static void requestForceTick() {
-        ApplicationManager.getApplication().invokeLater(() -> {
+        Runnable request = () -> {
             String uri = HintsService.getCurrentFileUri();
             if (uri == null) {
                 LOG.info("Force tick requested but no file is selected");
@@ -297,7 +302,12 @@ public class HintsFilePoller implements Runnable {
             }
             Position caretPosition = HintsService.getCurrentCaretPosition();
             writeTriggerFile(uri, caretPosition, HintsService.getTopic(), true);
-        });
+        };
+        if (ApplicationManager.getApplication().isDispatchThread()) {
+            request.run();
+        } else {
+            ApplicationManager.getApplication().invokeLater(request);
+        }
     }
 
     /**
@@ -326,12 +336,23 @@ public class HintsFilePoller implements Runnable {
      * has no other way to read them - it only ever sees the documents the
      * LSP client syncs.
      *
+     * Writing the trigger also records the trigger timestamp for the file
+     * (see HintsService.noteAnalysisTriggered): the completion of the
+     * file's next analysis consumes it as the history entry's timestamp,
+     * so the history labels the analysis with the time it was triggered -
+     * the same time the Analyze click's status label names it with (see
+     * HintsPanel.applyTopic) - rather than the later completion time.
+     *
      * @param uri           the URI of the file to analyze
      * @param caretPosition the caret position, or null when unknown
      * @param topic         the topic/goal, or an empty string when none
      * @param force         true to bypass the server's duplicate check
      */
     public static void writeTriggerFile(String uri, Position caretPosition, String topic, boolean force) {
+        // The trigger moment, recorded before anything below can fail: the
+        // file's next analysis completion consumes it as the history entry's
+        // timestamp (see HintsService.completeMarkdownForUri).
+        HintsService.noteAnalysisTriggered(uri);
         try {
             Path dir = getHintsDir();
             Files.createDirectories(dir);
