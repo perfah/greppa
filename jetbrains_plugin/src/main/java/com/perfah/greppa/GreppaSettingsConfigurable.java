@@ -58,11 +58,10 @@ public class GreppaSettingsConfigurable implements Configurable {
         settingsComponent.setLlmModel(settings.llmModel);
         settingsComponent.setLlmApiKey(settings.getLlmApiKey());
         settingsComponent.setGuideline(settings.guideline);
-        // A hand-edited non-positive value in the XML means "leave the
-        // variable unset" (see GreppaSettingsState.llmMaxTokens), which
-        // applies the server's built-in default of 16384; the spinner's
-        // model starts at 1, so that default is shown instead.
-        settingsComponent.setLlmMaxTokens(settings.llmMaxTokens > 0 ? settings.llmMaxTokens : 16384);
+        // Math.max guards a hand-edited negative value in the XML: the
+        // spinner's model rejects values below 0, and 0 is the no-cap
+        // default (see GreppaSettingsState.llmMaxTokens).
+        settingsComponent.setLlmMaxTokens(Math.max(0, settings.llmMaxTokens));
         settingsComponent.setDisabledSections(settings.disabledSections);
         // Math.max guards a hand-edited negative value in the XML: the
         // spinner's model rejects values below 0.

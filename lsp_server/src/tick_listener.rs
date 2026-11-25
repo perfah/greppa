@@ -75,34 +75,31 @@ fn llm_api_key() -> String {
     std::env::var("GREPPA_LLM_API_KEY").unwrap_or_else(|_| "ollama".to_string())
 }
 
-/// Resolves the maximum number of tokens the analysis inference may
-/// generate, from the environment. The budget is shared between the
-/// answer and any hidden reasoning: reasoning-heavy models generate a
-/// long chain-of-thought before the answer, and when the budget is
-/// too small for both, the reasoning alone exhausts it - the stream
-/// then ends with the finish reason "length" without a single answer
-/// token, and the panel shows the no-analysis fallback text (see
-/// run_ollama_work). The IDE's server descriptor passes the value
-/// configured in the settings as GREPPA_LLM_MAX_TOKENS; the default
-/// of 16384 leaves room for a reasoning model's chain-of-thought plus
-/// the full Markdown document and applies when the variable is unset
-/// or invalid. The value travels in a 16-bit field of the OpenAI chat
-/// request (the client library's max_tokens type), so the ceiling is
-/// 65535; a larger configured value is logged and falls back to the
-/// default instead of silently undoing the user's tuning.
-fn llm_max_tokens() -> u16 {
+/// Resolves the optional maximum number of tokens the analysis inference
+/// may generate, from the environment. The IDE's server descriptor passes
+/// the value configured in the settings as GREPPA_LLM_MAX_TOKENS; unset,
+/// 0 or an invalid value all mean no cap, so None is returned and the
+/// request carries no token budget at all - the LLM service then applies
+/// its own output limit, and hidden reasoning can never exhaust a budget
+/// our side imposed. A positive value that fits the OpenAI chat request's
+/// token field is returned as the cap; a value too large for that field
+/// cannot be sent as-is, so it is logged and treated as no cap, the
+/// closest match for the user's intent, instead of silently
+/// substituting a smaller budget.
+fn llm_max_tokens() -> Option<u16> {
     match std::env::var("GREPPA_LLM_MAX_TOKENS") {
         Ok(value) => match value.parse::<u16>() {
-            Ok(max_tokens) => max_tokens,
+            Ok(0) => None,
+            Ok(max_tokens) => Some(max_tokens),
             Err(_) => {
                 log_message(&format!(
-                    "[tick llm] invalid GREPPA_LLM_MAX_TOKENS value '{}', using the default of 16384 (the maximum is 65535)",
+                    "[tick llm] invalid GREPPA_LLM_MAX_TOKENS value '{}', using no cap",
                     value
                 ));
-                16384
+                None
             }
         },
-        Err(_) => 16384,
+        Err(_) => None,
     }
 }
 
@@ -441,9 +438,9 @@ fn strip_repeated_prefix(prefix: &str, completion: &str) -> String {
 /// delta field the OpenAI client library does not expose, so the
 /// accumulated document stays empty for the whole reasoning phase -
 /// and when the stream then ends without any content, the finish
-/// reason captured below says whether the token budget was exhausted
-/// by that reasoning or the model ended its turn without any answer
-/// text at all.
+/// reason captured below says whether a token limit cut the
+/// generation or the model ended its turn without any answer text
+/// at all.
 async fn run_ollama_work(
     file_content: &str,
     cursor_position: Option<Position>,
@@ -514,13 +511,13 @@ async fn run_ollama_work(
     let mut receiver_dropped = false;
     // The finish reason of the stream's last choice, as the lowercase
     // name the service reports ("stop", "length", ...). It says WHY a
-    // stream can end without any answer text: "length" means the token
-    // budget was exhausted before the first answer token - a
-    // reasoning-heavy model can spend all of it on hidden
-    // chain-of-thought - while a stop without content means the model
-    // ended its turn without writing any answer text at all. Without
-    // it, an empty stream was indistinguishable from a budget
-    // exhaustion.
+    // stream can end without any answer text: "length" means a token
+    // limit was reached before the first answer token - with a budget
+    // configured that limit is ours, and a reasoning-heavy model can
+    // spend all of it on hidden chain-of-thought - while a stop
+    // without content means the model ended its turn without writing
+    // any answer text at all. Without it, an empty stream was
+    // indistinguishable from a budget exhaustion.
     //
     // The value is captured through its Debug formatting rather than
     // through the field's own type: the pinned async-openai 0.14
@@ -592,22 +589,24 @@ async fn run_ollama_work(
     // The complete document, or a fallback when the model produced nothing.
     // Sending is skipped when the last throttled snapshot already contained
     // the complete text. The fallback names the cause the stream's finish
-    // reason tells apart: "length" means the token budget (see
-    // llm_max_tokens) was exhausted before a single answer token was
-    // generated - a reasoning model can spend all of it on hidden
-    // thinking, and only a bigger budget or a non-reasoning model fixes
-    // that - while any other finish reason means the model ended its
-    // turn without writing any answer text at all, which no budget
-    // increase fixes.
+    // reason tells apart: "length" means a token limit cut the generation
+    // before a single answer token was generated. The budget-exhausted
+    // wording is used only when a budget was actually configured (see
+    // llm_max_tokens), because a reasoning model can spend all of it on
+    // hidden thinking; with no budget the service's own output limit
+    // applied, and the generic wording points at the log instead of
+    // blaming a setting that is not in effect. Any other finish reason
+    // means the model ended its turn without writing any answer text at
+    // all, which no budget increase fixes.
     let final_markdown = if accumulated.is_empty() {
         log_message(&format!(
             "[tick llm] stream ended without any content (finish reason: {})",
             finish_reason.as_deref().unwrap_or("not reported")
         ));
         match finish_reason.as_deref() {
-            Some("length") => "No analysis returned by the LLM service: the token budget \
+            Some("length") if llm_max_tokens().is_some() => "No analysis returned by the LLM service: the token budget \
 (LLM max tokens in the settings) was exhausted before any answer text was generated - a reasoning model \
-spent it all on hidden thinking. Increase the budget or use a non-reasoning model."
+spent it all on hidden thinking. Increase the budget, set it to 0 for no cap, or use a non-reasoning model."
                 .to_string(),
             _ => "No analysis returned by the LLM service: the model ended its response without \
 generating any answer text. See the greppa-lsp log for the finish reason."
@@ -648,7 +647,7 @@ fn build_analysis_request(
     model: &str,
     prompt: &str,
 ) -> anyhow::Result<CreateChatCompletionRequest> {
-    let request = CreateChatCompletionRequestArgs::default()
+    let mut request_args = CreateChatCompletionRequestArgs::default()
         .model(model)
         .messages(vec![
             ChatCompletionRequestMessageArgs::default()
@@ -660,20 +659,21 @@ fn build_analysis_request(
                 .content(prompt)
                 .build()?,
         ])
-        // The response is a full Markdown document with code snippets, so
-        // it needs plenty of room. Reasoning-heavy models generate a
-        // hidden chain-of-thought before the answer, and the token
-        // budget is shared between the two: with 4096 the reasoning
-        // alone exhausted the budget, so the stream ended without a
-        // single answer token and the panel showed "No analysis
-        // returned by the LLM service.". The budget is configurable
-        // (see llm_max_tokens) because the room a model needs depends
-        // on whether and how much it reasons.
-        .max_tokens(llm_max_tokens())
         .temperature(0.1_f32)
-        .top_p(0.8_f32)
-        .build()?;
-    Ok(request)
+        .top_p(0.8_f32);
+    // The token budget is optional: a configured budget is shared between
+    // the answer and any hidden reasoning - reasoning-heavy models
+    // generate a long chain-of-thought before the answer, and a budget
+    // too small for both is exhausted by the reasoning alone, so the
+    // stream ends without a single answer token and the panel shows
+    // the "No analysis returned by the LLM service." fallback. With no
+    // budget configured (the default; see llm_max_tokens) the parameter
+    // is omitted entirely: our side imposes no cap and the LLM service
+    // applies its own output limit.
+    if let Some(max_tokens) = llm_max_tokens() {
+        request_args = request_args.max_tokens(max_tokens);
+    }
+    Ok(request_args.build()?)
 }
 
 /// Sends the given markdown as the last snapshot of a stream, e.g. when the
