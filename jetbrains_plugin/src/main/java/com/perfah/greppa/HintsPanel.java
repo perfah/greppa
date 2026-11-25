@@ -22,6 +22,8 @@ import com.intellij.util.ui.JBUI;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.HyperlinkEvent;
+import javax.swing.text.Document;
+import javax.swing.text.PlainDocument;
 import javax.swing.text.html.HTMLEditorKit;
 import javax.swing.text.html.StyleSheet;
 import java.awt.*;
@@ -94,6 +96,24 @@ public class HintsPanel extends JPanel {
     private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
+    /**
+     * The single document behind every tab's Focus field. The tool window
+     * gives each tab its own HintsPanel with its own field component,
+     * but the focus they edit is one session-wide value, so the fields
+     * share one document: typing in any tab's field, and the history
+     * combobox setting the text, write the document and with it every
+     * tab's field at once. The value therefore cannot differ per tab,
+     * and it changes only where the user changes it - by typing in it
+     * or by using the history combobox - never because a tab switch or
+     * a refresh reconciled per-tab copies; before the document was
+     * shared, each tab's field held its own text and only some of it
+     * survived the refresh-time sync, so the fields drifted apart and
+     * the value appeared to change with every tab switch. Static like
+     * the topic itself (HintsService.topic): the field is one logical
+     * input that happens to be rendered once per tab.
+     */
+    private static final Document SHARED_TOPIC_DOCUMENT = new PlainDocument();
+
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel contentPanel = new JPanel(cardLayout);
     private final JLabel placeholderLabel = new JLabel();
@@ -103,7 +123,13 @@ public class HintsPanel extends JPanel {
     private final JTextPane textPane = new JTextPane();
     /** Scroll pane around the text pane; a field so refresh() can preserve the scroll position. */
     private final JBScrollPane scrollPane = new JBScrollPane(textPane);
-    /** Input for the optional topic/goal the analyses are viewed through. */
+    /**
+     * Input for the optional topic/goal the analyses are viewed through.
+     * Backed by the document all tabs' fields share (see
+     * SHARED_TOPIC_DOCUMENT), so the shown value is the same on every
+     * tab and changes only when the user types in it or uses the
+     * history combobox.
+     */
     private final JBTextField topicField = new JBTextField();
     /**
      * Toggles pausing the LSP server's analyses and completions. Its label
@@ -164,7 +190,9 @@ public class HintsPanel extends JPanel {
      * The analyses the combo was last built from. refresh() compares
      * against it to detect that a new analysis completed or the analyses
      * were cleared - both shift the entry indices, so the combo is
-     * rebuilt and the selection resets to the newest entry.
+     * rebuilt and the selection resets to the newest entry. The combo's
+     * action listener also reads it, so the topic field is filled from
+     * the very entry the user selected (see buildHistoryPanel).
      */
     private List<HintsService.HistoryEntry> renderedHistory = List.of();
 
@@ -230,6 +258,10 @@ public class HintsPanel extends JPanel {
         this.sectionNames = List.copyOf(sectionNames);
         this.unmatchedOnly = unmatchedOnly;
         setBorder(new EmptyBorder(8, 8, 8, 8));
+
+        // Every tab's Focus field renders the one shared document, so the
+        // value is identical on all tabs (see SHARED_TOPIC_DOCUMENT).
+        topicField.setDocument(SHARED_TOPIC_DOCUMENT);
 
         // The analysis arrives as Markdown; it is converted to HTML by
         // MarkdownParser and rendered here. JTextPane wraps text at the
@@ -445,6 +477,12 @@ public class HintsPanel extends JPanel {
      * every custom notification, so the server analyzes the file through
      * this topic when one is set.
      *
+     * The field is one logical input shared by all tabs: every tab's
+     * field is backed by the same document (see SHARED_TOPIC_DOCUMENT),
+     * so its value is identical on every tab and changes only when the
+     * user types in it or uses the history combobox - switching tabs
+     * never changes what it shows.
+     *
      * The topic is applied only explicitly: pressing Enter or clicking the
      * Analyze button stores it and asks the server to generate a new
      * analysis of the current file. Typing alone triggers nothing -
@@ -508,11 +546,27 @@ public class HintsPanel extends JPanel {
         JPanel panel = new JPanel(new BorderLayout(4, 0));
         panel.add(new JLabel("History:"), BorderLayout.WEST);
         historyCombo.setToolTipText(
-                "The analyses of the current file, newest first, labeled with when each was triggered and the focus it was viewed through. The newest shows the live document, including the next analysis as it streams in; selecting a previous one shows that analysis and fills the focus field with its focus.");
+                "The analyses of the current file, newest first, labeled with when each was triggered and the focus it was viewed through. The newest shows the live document, including the next analysis as it streams in; selecting a previous one shows that analysis and fills the focus field with the focus it was generated through.");
         historyCombo.addActionListener(e -> {
             if (updatingHistoryCombo) {
                 return;
             }
+            // Using the combobox is one of the two user actions that may
+            // set the field, typing being the other (see
+            // SHARED_TOPIC_DOCUMENT): browsing a previous analysis shows
+            // the focus it was generated through, returning to the live
+            // view shows the applied topic again. The write goes to the
+            // shared document, so every tab's field follows at once;
+            // refresh() deliberately does not write the field, so no
+            // other event can change the value the user did not touch.
+            // The entry comes from renderedHistory - the very list the
+            // combo's items were built from - so the field is filled
+            // from the entry the user actually picked.
+            int selectedVersion = historyCombo.getSelectedIndex();
+            boolean browsingHistory = selectedVersion > 0 && selectedVersion < renderedHistory.size();
+            topicField.setText(browsingHistory
+                    ? renderedHistory.get(selectedVersion).focus()
+                    : HintsService.getTopic());
             refresh();
         });
         panel.add(historyCombo, BorderLayout.CENTER);
@@ -612,22 +666,6 @@ public class HintsPanel extends JPanel {
         String uri = HintsService.getCurrentFileUri();
         long triggeredAt = HintsService.getAnalysisTriggeredAt(uri);
         statusLabel.setText("Analysis triggered: " + historyIdentifier(triggeredAt, topic));
-    }
-
-    /**
-     * Syncs the topic field with the given focus: the focus of the
-     * previous analysis the user is browsing, or the stored topic - the
-     * input for the next analysis - while the live view is shown. The
-     * field is skipped while it has focus, so a refresh never discards
-     * text the user is typing before it is applied.
-     */
-    private void syncTopicField(String focus) {
-        if (topicField.hasFocus()) {
-            return;
-        }
-        if (!Objects.equals(topicField.getText(), focus)) {
-            topicField.setText(focus);
-        }
     }
 
     /**
@@ -789,16 +827,13 @@ public class HintsPanel extends JPanel {
             // The pause state is global (HintsService), but every tab has
             // its own panel with its own copy of the controls; sync the
             // pause button on every refresh so a pause toggled on one tab
-            // is reflected on the other tabs. The topic field follows the
-            // selection: browsing a previous analysis shows the focus it
-            // was generated through, otherwise the field shows the stored
-            // topic - the input for the next analysis. The field is
-            // skipped while focused, so a refresh never discards text the
-            // user is typing before it is applied.
+            // is reflected on the other tabs. The topic field needs no
+            // syncing: all tabs' fields share one document (see
+            // SHARED_TOPIC_DOCUMENT), and refresh must not write it - the
+            // field's value changes only when the user types in it or
+            // uses the history combobox, so switching tabs or files never
+            // changes what it shows.
             syncPauseButton();
-            syncTopicField(browsingHistory
-                    ? history.get(selectedVersion).focus()
-                    : HintsService.getTopic());
 
             // The server-reported error is handled before the unchanged-
             // Markdown early return: an error can arrive while the document
