@@ -81,16 +81,32 @@ fn llm_api_key() -> String {
 /// 0 or an invalid value all mean no cap, so None is returned and the
 /// request carries no token budget at all - the LLM service then applies
 /// its own output limit, and hidden reasoning can never exhaust a budget
-/// our side imposed. A positive value that fits the OpenAI chat request's
-/// token field is returned as the cap; a value too large for that field
-/// cannot be sent as-is, so it is logged and treated as no cap, the
-/// closest match for the user's intent, instead of silently
-/// substituting a smaller budget.
+/// our side imposed.
+///
+/// The variable is parsed as a 64-bit integer and only then mapped onto
+/// the chat request's 16-bit token field, instead of being parsed as the
+/// field's own type: parsing it as u16 rejected every value above the
+/// field's maximum as "invalid", which effectively clamped the setting
+/// to that maximum even though the IDE's int setting holds far larger
+/// values. The mapping: 0 or less means no cap (matching the IDE
+/// setting, where 0 or less leaves the variable unset), a value up to
+/// the field's maximum is returned as the cap, and a larger value
+/// cannot be sent as-is through the pinned client library, so it is
+/// logged and treated as no cap - the closest match for the user's
+/// intent, since no cap is strictly more permissive than any budget -
+/// instead of silently substituting a smaller budget.
 fn llm_max_tokens() -> Option<u16> {
     match std::env::var("GREPPA_LLM_MAX_TOKENS") {
-        Ok(value) => match value.parse::<u16>() {
-            Ok(0) => None,
-            Ok(max_tokens) => Some(max_tokens),
+        Ok(value) => match value.parse::<i64>() {
+            Ok(max_tokens) if max_tokens <= 0 => None,
+            Ok(max_tokens) if max_tokens <= u16::MAX as i64 => Some(max_tokens as u16),
+            Ok(max_tokens) => {
+                log_message(&format!(
+                    "[tick llm] GREPPA_LLM_MAX_TOKENS value {} is above the maximum the chat request's token field can carry, using no cap",
+                    max_tokens
+                ));
+                None
+            }
             Err(_) => {
                 log_message(&format!(
                     "[tick llm] invalid GREPPA_LLM_MAX_TOKENS value '{}', using no cap",
@@ -596,8 +612,8 @@ async fn run_ollama_work(
     // hidden thinking; with no budget the service's own output limit
     // applied, and the generic wording points at the log instead of
     // blaming a setting that is not in effect. Any other finish reason
-    // means the model ended its turn without writing any answer text at
-    // all, which no budget increase fixes.
+    // means the model ended its turn without writing any answer text
+    // at all, which no budget increase fixes.
     let final_markdown = if accumulated.is_empty() {
         log_message(&format!(
             "[tick llm] stream ended without any content (finish reason: {})",
