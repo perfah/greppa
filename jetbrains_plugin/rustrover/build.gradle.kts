@@ -23,7 +23,7 @@ group = "com.perfah"
 // it: the <version> in plugin.xml, the version in
 // idea/build.gradle.kts, and lsp_server/Cargo.toml (the Rust server
 // reports that version to the IDE). Bump all four together.
-version = "1.0.3"
+version = "1.0.4"
 
 java {
     toolchain {

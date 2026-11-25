@@ -6,7 +6,7 @@ name = "lsp_server"
 # jetbrains_plugin/src/main/resources/META-INF/plugin.xml and the version
 # in jetbrains_plugin/idea/build.gradle.kts and
 # jetbrains_plugin/rustrover/build.gradle.kts. Bump all four together.
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 
 [dependencies]
