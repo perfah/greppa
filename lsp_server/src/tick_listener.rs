@@ -663,7 +663,18 @@ fn build_analysis_request(
     model: &str,
     prompt: &str,
 ) -> anyhow::Result<CreateChatCompletionRequest> {
-    let mut request_args = CreateChatCompletionRequestArgs::default()
+    // The builder's setter methods borrow: each takes &mut self and
+    // returns &mut Self, so a chained
+    // CreateChatCompletionRequestArgs::default()... expression only
+    // yields a borrow of a temporary that dies with the statement -
+    // binding that chain to a variable left a dangling borrow for the
+    // conditional max_tokens call below (E0716). The builder therefore
+    // lives in a named local and the setters are called as statements
+    // on it, which also keeps the optional token budget a plain if-let
+    // instead of two duplicated chains, one with and one without
+    // max_tokens.
+    let mut request_args = CreateChatCompletionRequestArgs::default();
+    request_args
         .model(model)
         .messages(vec![
             ChatCompletionRequestMessageArgs::default()
@@ -687,7 +698,7 @@ fn build_analysis_request(
     // is omitted entirely: our side imposes no cap and the LLM service
     // applies its own output limit.
     if let Some(max_tokens) = llm_max_tokens() {
-        request_args = request_args.max_tokens(max_tokens);
+        request_args.max_tokens(max_tokens);
     }
     Ok(request_args.build()?)
 }
