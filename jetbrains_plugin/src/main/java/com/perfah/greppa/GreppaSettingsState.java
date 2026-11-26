@@ -52,14 +52,16 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
     public String llmModel = "gemma4:31b-cloud";
 
     /**
-     * Maximum number of tokens the LLM may generate for one analysis;
-     * 0 (the default) means no cap at all. A positive budget is shared
-     * between the answer and any hidden reasoning: reasoning-heavy
-     * models generate a long chain-of-thought before the answer, and
-     * when the budget is too small for both, the reasoning alone
-     * exhausts it - the analysis then ends with the "No analysis
-     * returned by the LLM service." fallback. Passed to the server as
-     * the GREPPA_LLM_MAX_TOKENS environment variable when the server is
+     * Maximum number of tokens the LLM may generate for one inference -
+     * an analysis or a completion; 0 (the default) means no cap at
+     * all. A positive budget is shared between the answer and any
+     * hidden reasoning: reasoning-heavy models generate a long
+     * chain-of-thought before the answer, and when the budget is too
+     * small for both, the reasoning alone exhausts it - the analysis
+     * then ends with the "No analysis returned by the LLM service."
+     * fallback, and the completion comes back with no text, so no
+     * suggestion appears. Passed to the server as the
+     * GREPPA_LLM_MAX_TOKENS environment variable when the server is
      * launched; a value of 0 or less leaves the variable unset, which
      * also means no cap: the server then sends no token budget to the
      * LLM service at all, and the model generates until it is done.

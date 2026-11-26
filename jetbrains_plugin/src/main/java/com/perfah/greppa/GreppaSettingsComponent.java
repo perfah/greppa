@@ -78,13 +78,13 @@ public class GreppaSettingsComponent {
     /** Free-text standing instructions for the LLM; empty means none. */
     private final JTextArea guidelineField = new JTextArea(4, 40);
     /**
-     * Maximum number of tokens the LLM may generate for one analysis
-     * (see GreppaSettingsState.llmMaxTokens); 0 means no cap at all.
-     * A spinner instead of a text field, like the auto-refresh field
-     * below, so the value is always a valid non-negative number. The
-     * model's initial value is the setting's default (0, no cap), like
-     * the auto-refresh spinner's, so the field is populated with the
-     * default value.
+     * Maximum number of tokens the LLM may generate for one analysis or
+     * completion (see GreppaSettingsState.llmMaxTokens); 0 means no
+     * cap at all. A spinner instead of a text field, like the
+     * auto-refresh field below, so the value is always a valid
+     * non-negative number. The model's initial value is the setting's
+     * default (0, no cap), like the auto-refresh spinner's, so the
+     * field is populated with the default value.
      */
     private final JSpinner llmMaxTokensField =
             new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 256));
@@ -150,12 +150,13 @@ public class GreppaSettingsComponent {
                         + "Applied to all analyses and completions. Empty = no guideline.");
 
         llmMaxTokensField.setToolTipText(
-                "Maximum number of tokens the LLM may generate for one analysis. "
+                "Maximum number of tokens the LLM may generate for one analysis or completion. "
                         + "0 (the default) means no cap at all: no token budget is sent to the LLM service, "
                         + "and the model generates until it is done. "
                         + "A positive budget is shared between the answer and any hidden reasoning: reasoning-heavy models "
                         + "generate a long chain-of-thought before the answer, and when the budget is too small for both, "
-                        + "the reasoning alone exhausts it - the analysis then ends with 'No analysis returned by the LLM service.'.");
+                        + "the reasoning alone exhausts it - the analysis then ends with 'No analysis returned by the LLM service.' "
+                        + "and the completion returns no text, so no suggestion appears.");
 
         autoUpdateMinCharsField.setToolTipText(
                 "Minimum number of characters that must have changed since the last analysis "
@@ -352,12 +353,12 @@ public class GreppaSettingsComponent {
         guidelineField.setText(guideline == null ? "" : guideline);
     }
 
-    /** Returns the maximum number of tokens one analysis may generate; 0 means no cap. */
+    /** Returns the maximum number of tokens one inference may generate; 0 means no cap. */
     public int getLlmMaxTokens() {
         return (Integer) llmMaxTokensField.getValue();
     }
 
-    /** Sets the shown maximum number of tokens one analysis may generate; 0 means no cap. */
+    /** Sets the shown maximum number of tokens one inference may generate; 0 means no cap. */
     public void setLlmMaxTokens(int maxTokens) {
         llmMaxTokensField.setValue(maxTokens);
     }

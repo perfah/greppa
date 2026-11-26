@@ -38,12 +38,6 @@ const SNAPSHOT_INTERVAL: Duration = Duration::from_millis(100);
 /// completion popup wait for minutes.
 const COMPLETION_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Maximum number of tokens a completion may generate. The previous value
-/// of 256 cut completions off after roughly 30 lines of code, because the
-/// request forbade the model from generating more; 1024 leaves room for a
-/// full multi-line insertion while still bounding latency and cost.
-const COMPLETION_MAX_TOKENS: u16 = 1024;
-
 /// Resolves the base URL of the LLM service's OpenAI-compatible chat
 /// completions endpoint from the environment, so no provider is
 /// assumed: any service that speaks the OpenAI API works - a local
@@ -75,12 +69,13 @@ fn llm_api_key() -> String {
     std::env::var("GREPPA_LLM_API_KEY").unwrap_or_else(|_| "ollama".to_string())
 }
 
-/// Resolves the optional maximum number of tokens the analysis inference
-/// may generate, from the environment. The IDE's server descriptor passes
-/// the value configured in the settings as GREPPA_LLM_MAX_TOKENS; unset,
-/// 0 or an invalid value all mean no cap, so None is returned and the
-/// request carries no token budget at all - the LLM service then applies
-/// its own output limit, and hidden reasoning can never exhaust a budget
+/// Resolves the optional maximum number of tokens the LLM may generate
+/// for one inference - an analysis or a completion - from the
+/// environment. The IDE's server descriptor passes the value
+/// configured in the settings as GREPPA_LLM_MAX_TOKENS; unset, 0 or an
+/// invalid value all mean no cap, so None is returned and the request
+/// carries no token budget at all - the LLM service then applies its
+/// own output limit, and hidden reasoning can never exhaust a budget
 /// our side imposed.
 ///
 /// The variable is parsed as a 64-bit integer and only then mapped onto
@@ -276,6 +271,14 @@ impl StreamingTickListener for OllamaTickListener {
 /// numbered code and the <CURSOR> marker, so the model only has to
 /// produce the insertion text.
 ///
+/// The token budget is the same setting the analysis request uses (see
+/// llm_max_tokens): a configured budget caps the completion as well, and
+/// with no cap configured the max_tokens parameter is omitted entirely,
+/// exactly like for an analysis. The request used to hardcode its own
+/// fixed completion budget; a reasoning-heavy model spent it all on
+/// hidden thinking before any answer text, so the completion came back
+/// empty and no suggestion appeared at all.
+///
 /// The request is wrapped in a timeout: a completion must feel instant,
 /// and when the LLM service is busy (e.g. an analysis is streaming) it
 /// is better to return no completion than to make the completion
@@ -301,7 +304,15 @@ pub async fn complete(
     let client = llm_client();
     let model = llm_model();
 
-    let request = CreateChatCompletionRequestArgs::default()
+    // The builder's setter methods borrow (each takes &mut self and
+    // returns &mut Self), so a chained
+    // CreateChatCompletionRequestArgs::default()... expression only
+    // yields a borrow of a temporary that dies with the statement; the
+    // builder lives in a named local and the setters are called as
+    // statements on it, like in build_analysis_request, which also
+    // keeps the optional token budget below a plain if-let.
+    let mut request_args = CreateChatCompletionRequestArgs::default();
+    request_args
         .model(&model)
         .messages(vec![
             ChatCompletionRequestMessageArgs::default()
@@ -313,10 +324,19 @@ pub async fn complete(
                 .content(prompt)
                 .build()?,
         ])
-        .max_tokens(COMPLETION_MAX_TOKENS)
         .temperature(0.1_f32)
-        .top_p(0.8_f32)
-        .build()?;
+        .top_p(0.8_f32);
+    // The same optional token budget the analysis request uses (see
+    // llm_max_tokens): a configured budget caps the completion, and
+    // with no cap the parameter is omitted entirely. The completion
+    // must not carry a budget the analysis does not: a fixed budget is
+    // spent on hidden reasoning first, and when it is exhausted before
+    // any answer text the completion comes back empty - no suggestion
+    // appears at all.
+    if let Some(max_tokens) = llm_max_tokens() {
+        request_args.max_tokens(max_tokens);
+    }
+    let request = request_args.build()?;
 
     let response = match tokio::time::timeout(COMPLETION_TIMEOUT, client.chat().create(request)).await {
         Ok(result) => result?,

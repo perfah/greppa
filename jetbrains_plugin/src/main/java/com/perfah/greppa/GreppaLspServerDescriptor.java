@@ -109,17 +109,17 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
             // The key itself is deliberately not logged.
         }
         // The maximum number of tokens the LLM may generate for one
-        // analysis; 0 (the default) means no cap at all. A positive
-        // budget is shared between the answer and any hidden
-        // reasoning: reasoning-heavy models generate a long
+        // analysis or completion; 0 (the default) means no cap at
+        // all. A positive budget is shared between the answer and any
+        // hidden reasoning: reasoning-heavy models generate a long
         // chain-of-thought before the answer, and when the budget is
         // too small for both, the reasoning alone exhausts it - the
         // analysis then ends with the "No analysis returned by the
-        // LLM service." fallback (see llm_max_tokens in
-        // tick_listener.rs). Only passed when positive: 0 means no
-        // cap on the server as well, so the variable stays unset and
-        // the server sends no token budget to the LLM service at
-        // all.
+        // LLM service." fallback and the completion returns no text
+        // (see llm_max_tokens in tick_listener.rs). Only passed when
+        // positive: 0 means no cap on the server as well, so the
+        // variable stays unset and the server sends no token budget
+        // to the LLM service at all.
         if (settings.llmMaxTokens > 0) {
             commandLine.withEnvironment("GREPPA_LLM_MAX_TOKENS", String.valueOf(settings.llmMaxTokens));
             LOG.info("Setting GREPPA_LLM_MAX_TOKENS to " + settings.llmMaxTokens);
