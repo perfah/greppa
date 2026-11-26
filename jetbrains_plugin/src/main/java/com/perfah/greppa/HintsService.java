@@ -52,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * server clears it by writing an empty error file at the start of every
  * analysis attempt, so the message always describes the latest attempt.
  *
- * The service also keeps a bounded history of each file's analyses (see
+ * The service also keeps the full history of each file's analyses (see
  * completeMarkdownForUri and getHistoryForUri): every finished analysis
  * becomes an entry, newest first, carrying its trigger metadata - when
  * the analysis was triggered and the focus it was viewed through (see
@@ -60,8 +60,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * newest entry is the file's current analysis and the merge base that the
  * next analysis of the file streams into; there is no separate current
  * slot, so generating a new analysis (the Analyze button, Ctrl+S) simply
- * adds the next entry. The history is in-memory only; it does not survive
- * an IDE restart.
+ * adds the next entry. The history is uncapped and in-memory only; it
+ * does not survive an IDE restart.
  *
  * The service also stores the Imports pane's state per file: the entries
  * the local import scan produced (see ImportDetector) plus the files the
@@ -86,12 +86,6 @@ public class HintsService {
 
     /** Latest document per normalized URI; partial while a stream is in progress. */
     private static final Map<String, String> latestByUri = new ConcurrentHashMap<>();
-    /**
-     * How many analyses are kept per file, the newest included. Bounded so
-     * a long session cannot grow the history without limit; the oldest
-     * entry is dropped first.
-     */
-    private static final int MAX_HISTORY = 5;
     /**
      * The analyses of each file, newest first: the entry the latest
      * finished analysis added, then the one before that, and so on.
@@ -212,9 +206,6 @@ public class HintsService {
         boolean unchanged = !analyses.isEmpty() && analyses.get(0).markdown().equals(content);
         if (!unchanged) {
             analyses.add(0, new HistoryEntry(content, entryTime, currentFocus()));
-            if (analyses.size() > MAX_HISTORY) {
-                analyses.remove(analyses.size() - 1);
-            }
         }
         latestByUri.put(normalized, content);
         notifyListenersIfCurrentFile(normalized);

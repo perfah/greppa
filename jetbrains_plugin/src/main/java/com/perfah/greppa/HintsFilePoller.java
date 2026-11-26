@@ -25,7 +25,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Polls the LSP server's Markdown analysis files and updates the tool window.
@@ -61,15 +60,10 @@ import java.util.stream.Collectors;
 public class HintsFilePoller implements Runnable {
 
     private static final Logger LOG = Logger.getInstance(HintsFilePoller.class);
-    private static final int MAX_FILES_TO_KEEP = 10;
     private static final String URI_MARKER_PREFIX = "<!-- greppa-uri: ";
     private static final String URI_MARKER_SUFFIX = " -->";
     /** Name of the error file the Rust server writes when the LLM service fails. */
     private static final String ERROR_FILE_NAME = "error.trigger";
-    /** Maximum number of lines of one attached file sent to the analysis. */
-    private static final int MAX_LINES_PER_ATTACHMENT = 400;
-    /** Maximum number of attached lines sent to the analysis in total. */
-    private static final int MAX_TOTAL_ATTACHMENT_LINES = 2000;
 
     /**
      * Number of consecutive polls an analysis file must stay unchanged
@@ -226,8 +220,6 @@ public class HintsFilePoller implements Runnable {
                 LOG.warn("Failed to read analysis file " + path + ", skipping", e);
             }
         }
-
-        cleanOldFiles(files);
     }
 
     /**
@@ -384,19 +376,14 @@ public class HintsFilePoller implements Runnable {
      * given file: the entries checked in the Imports pane (see
      * HintsService.getAttachmentUris), each with its name, URI and current
      * content. The content is the editor's unsaved text when the file is
-     * open. Each file is capped at MAX_LINES_PER_ATTACHMENT lines and all
-     * files together at MAX_TOTAL_ATTACHMENT_LINES, with a visible
-     * truncation note, so one huge dependency cannot crowd the analyzed
-     * file out of the analysis prompt.
+     * open. The full content is attached, uncapped: the model's context
+     * window is the only limit on how much attachment content the
+     * analysis can consider, so a line cap here would silently hide part
+     * of an attached file from the analysis.
      */
     private static String attachmentsJson(String uri) {
         StringBuilder json = new StringBuilder("[");
-        int remainingLines = MAX_TOTAL_ATTACHMENT_LINES;
         for (String attachmentUri : HintsService.getAttachmentUris(uri)) {
-            if (remainingLines <= 0) {
-                LOG.warn("Attachment line budget exhausted, skipping " + attachmentUri);
-                break;
-            }
             VirtualFile file = VirtualFileManager.getInstance().findFileByUrl(attachmentUri);
             if (file == null || file.isDirectory()) {
                 LOG.warn("Attachment " + attachmentUri + " does not resolve, skipping");
@@ -406,30 +393,14 @@ public class HintsFilePoller implements Runnable {
             if (content == null) {
                 continue;
             }
-            List<String> lines = content.lines().collect(Collectors.toList());
-            int budget = Math.min(MAX_LINES_PER_ATTACHMENT, remainingLines);
-            int keptLines = Math.min(budget, lines.size());
-            boolean truncated = lines.size() > keptLines;
-            StringBuilder kept = new StringBuilder();
-            for (int i = 0; i < keptLines; i++) {
-                if (i > 0) {
-                    kept.append('\n');
-                }
-                kept.append(lines.get(i));
-            }
-            if (truncated) {
-                kept.append("\n... [truncated: first ").append(keptLines)
-                        .append(" of ").append(lines.size()).append(" lines]");
-            }
-            remainingLines -= keptLines;
             if (json.length() > 1) {
                 json.append(',');
             }
             json.append("{\"name\":").append(jsonQuote(file.getName()));
             json.append(",\"uri\":").append(jsonQuote(attachmentUri));
-            json.append(",\"content\":").append(jsonQuote(kept.toString()));
+            json.append(",\"content\":").append(jsonQuote(content));
             json.append('}');
-            LOG.info("Attaching " + attachmentUri + " (" + keptLines + " lines)");
+            LOG.info("Attaching " + attachmentUri + " (" + content.lines().count() + " lines)");
         }
         json.append(']');
         return json.toString();
@@ -670,19 +641,6 @@ public class HintsFilePoller implements Runnable {
             return Files.getLastModifiedTime(path).toMillis();
         } catch (IOException e) {
             return 0;
-        }
-    }
-
-    private void cleanOldFiles(List<Path> files) {
-        if (files.size() <= MAX_FILES_TO_KEEP) {
-            return;
-        }
-        for (Path path : files.subList(MAX_FILES_TO_KEEP, files.size())) {
-            try {
-                Files.deleteIfExists(path);
-            } catch (IOException e) {
-                LOG.warn("Failed to delete old analysis file " + path, e);
-            }
         }
     }
 }

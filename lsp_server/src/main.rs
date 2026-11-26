@@ -1353,7 +1353,11 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
 fn write_hints_file(uri: &str, markdown: &str) -> std::io::Result<()> {
     let dir = hints_dir();
     fs::create_dir_all(&dir)?;
-    clean_old_hint_files(&dir);
+    // No retention cap: one file per analyzed file, in the temp
+    // directory, and the startup cleanup in main clears the previous
+    // session's files at every server start. A cap here silently broke
+    // completions and code actions for the evicted files, because
+    // read_analysis_for_uri found no analysis for them anymore.
 
     let file_name = format!("{}.md", sanitize_uri(uri));
     let path = dir.join(file_name);
@@ -1396,8 +1400,10 @@ pub(crate) fn write_error_file(message: &str) {
     let path = dir.join("error.trigger");
     // Write to a temporary file and rename it so the IDE poller never
     // reads a partially-written message. The temporary name ends in .new,
-    // not .tmp: clean_old_hint_files removes stray *.tmp files and could
-    // otherwise race with this rename.
+    // not .tmp: the analysis writes use *.md.tmp as their temporary
+    // names, and a distinct suffix keeps this rename from ever colliding
+    // with one; stale temporaries of interrupted writes are cleared by
+    // the startup cleanup in main.
     let temp_path = dir.join("error.trigger.new");
     if let Err(e) = fs::write(&temp_path, message) {
         log_message(&format!("Failed to write the error file: {}", e));
@@ -1724,42 +1730,6 @@ fn shorten_title(description: &str) -> String {
     }
     let cut: String = description.chars().take(MAX_CHARS - 3).collect();
     format!("{}...", cut)
-}
-
-fn clean_old_hint_files(dir: &PathBuf) {
-    let max_files = 10;
-    let entries: Vec<_> = match fs::read_dir(dir) {
-        Ok(iter) => iter
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .map(|ext| ext == "md" || ext == "tmp")
-                    .unwrap_or(false)
-            })
-            .filter_map(|e| e.metadata().ok().map(|m| (e.path(), m.modified().ok())))
-            .collect(),
-        Err(_) => return,
-    };
-
-    // Orphaned temporary files (*.md.tmp) left behind by interrupted
-    // writes are never valid analyses; remove them immediately instead of
-    // letting them accumulate until the next server start. This is safe
-    // because ticks are serialized by the semaphore and the temporary
-    // file of the current write is only created after this cleanup runs.
-    let mut markdown_files = Vec::new();
-    for (path, modified) in entries {
-        if path.extension().map(|ext| ext == "tmp").unwrap_or(false) {
-            let _ = fs::remove_file(&path);
-        } else {
-            markdown_files.push((path, modified));
-        }
-    }
-
-    markdown_files.sort_by(|a, b| b.1.cmp(&a.1)); // newest first
-    for (path, _) in markdown_files.iter().skip(max_files) {
-        let _ = fs::remove_file(path);
-    }
 }
 
 fn hints_dir() -> PathBuf {
