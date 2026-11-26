@@ -74,18 +74,6 @@ public class HintsPanel extends JPanel {
     private static final String LINE_LINK_PREFIX = "greppa://lines/";
 
     /**
-     * The placeholder markdown the Rust server writes to the analysis
-     * file while an analysis generates (REVIEWING_MESSAGE in
-     * tick_listener.rs): a single italic line, so the panel shows a
-     * loading indication instead of the empty-state card until the
-     * first real content streams in. Compared against the document
-     * shown (see showStatus) so the status line describes the state
-     * the content is in: the placeholder means an analysis is
-     * generating, not loaded.
-     */
-    private static final String GENERATING_PLACEHOLDER = "_Generating analysis..._";
-
-    /**
      * Formats an analysis's trigger time for its history combo label,
      * like "2026-11-05 23:57:42": the date and second the analysis was
      * triggered, in the local time zone. Second, not minute, resolution:
@@ -899,10 +887,17 @@ public class HintsPanel extends JPanel {
                 // bundled server and the LLM service are working:
                 // first-time setup is complete. The flag is persisted,
                 // so the placeholder stops showing the setup steps from
-                // now on, also after an IDE restart.
-                GreppaSettingsState settings = GreppaSettingsState.getInstance();
-                if (!settings.setupComplete) {
-                    settings.setupComplete = true;
+                // now on, also after an IDE restart. The generating
+                // placeholder does not count as a displayed analysis:
+                // showing it only proves the server runs and a tick
+                // started - the LLM service has not answered yet, and
+                // the analysis can still fail - so the setup steps stay
+                // until real content renders.
+                if (!HintsService.GENERATING_PLACEHOLDER.equals(markdown.trim())) {
+                    GreppaSettingsState settings = GreppaSettingsState.getInstance();
+                    if (!settings.setupComplete) {
+                        settings.setupComplete = true;
+                    }
                 }
                 List<String> renderedCodeBlocks = new ArrayList<>();
                 String html = MarkdownParser.toHtml(
@@ -958,7 +953,7 @@ public class HintsPanel extends JPanel {
             // re-analysis keeps the old document visible through the
             // section merge (see HintsService.mergeDocuments), so it never
             // hits this branch.
-            if (GENERATING_PLACEHOLDER.equals(markdown.trim())) {
+            if (HintsService.GENERATING_PLACEHOLDER.equals(markdown.trim())) {
                 statusLabel.setText("Generating analysis...");
             } else {
                 statusLabel.setText(markdown.isBlank() ? " " : "Analysis loaded");

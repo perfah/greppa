@@ -236,11 +236,30 @@ public class HintsFilePoller implements Runnable {
                     pending.quietPolls++;
                     if (pending.quietPolls >= QUIET_POLLS_TO_COMPLETE) {
                         pendingByPath.remove(path);
-                        // A blank document means the server truncated the
-                        // file at the start of a stream (or a write is in
-                        // progress); committing it would blank the panel, so
-                        // keep waiting for real content instead.
-                        if (!pending.markdown.isBlank()) {
+                        // Content that is not an analysis must not be
+                        // committed as one. A blank document means the
+                        // server truncated the file at the start of a
+                        // stream (or a write is in progress); committing
+                        // it would blank the panel. The "Generating
+                        // analysis..." placeholder (see
+                        // HintsService.GENERATING_PLACEHOLDER) is the
+                        // loading indication the server writes at the
+                        // start of every tick: a reasoning-heavy model
+                        // then thinks for minutes before the first real
+                        // content, so the file looks quiet while the
+                        // stream is still in its reasoning phase - the
+                        // quiet polls do not mean it is over. Committing
+                        // the placeholder made it a completed analysis:
+                        // a spurious history entry whose document is the
+                        // placeholder, which also consumed the trigger
+                        // timestamp the real analysis's entry should have
+                        // carried (see
+                        // HintsService.completeMarkdownForUri). Like the
+                        // Rust side (read_analysis_for_uri), the
+                        // placeholder is never an analysis; the next real
+                        // write re-reads the file and completes normally.
+                        if (!pending.markdown.isBlank()
+                                && !HintsService.GENERATING_PLACEHOLDER.equals(pending.markdown.trim())) {
                             LOG.info("HintsFilePoller: analysis file " + path.getFileName()
                                     + " unchanged for " + QUIET_POLLS_TO_COMPLETE
                                     + " polls, completing analysis for " + pending.uri);

@@ -84,6 +84,23 @@ import java.util.concurrent.ConcurrentHashMap;
 public class HintsService {
     private static final Logger LOG = Logger.getInstance(HintsService.class);
 
+    /**
+     * The placeholder markdown the Rust server writes to the analysis
+     * file at the start of every tick (REVIEWING_MESSAGE in
+     * tick_listener.rs): a single italic line, the loading indication
+     * while an analysis generates - a reasoning-heavy model thinks for
+     * minutes before the first real content, so the placeholder can be
+     * the analysis file's whole content for a long time. It is a
+     * loading indication, never an analysis: the poller does not commit
+     * it as a completed analysis (see HintsFilePoller.poll) and the
+     * panel shows its "Generating analysis..." status for it (see
+     * HintsPanel.showStatus). Defined here - the shared registry both
+     * sides use - so every consumer recognizes the exact same text,
+     * mirroring the single REVIEWING_MESSAGE definition on the Rust
+     * side.
+     */
+    public static final String GENERATING_PLACEHOLDER = "_Generating analysis..._";
+
     /** Latest document per normalized URI; partial while a stream is in progress. */
     private static final Map<String, String> latestByUri = new ConcurrentHashMap<>();
     /**
