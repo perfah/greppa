@@ -731,16 +731,29 @@ public class HintsPanel extends JPanel {
      * is needed. The status label confirms the export - or why nothing
      * was exported - because the file chooser itself gives no feedback
      * inside the panel; the next refresh overwrites the label as usual.
+     *
+     * The selected entry is resolved against renderedHistory - the very
+     * list the combo's items were built from, like the combo's own
+     * action listener does - and not against a fresh
+     * getHistoryForUri: a new analysis can complete between the last
+     * refresh and the click, and its entry is prepended to the live
+     * list, shifting every index; resolving the combo's selection
+     * against the shifted list exported the wrong analysis while the
+     * combo still showed the entry the user picked.
      */
     private void exportMarkdown() {
         // The document to export: the selected previous analysis while
         // the user is browsing the history, otherwise the live document.
+        // The entry comes from renderedHistory - the list the combo's
+        // items were built from, like in the combo's action listener -
+        // so the export is always the entry the combo shows; a fresh
+        // history fetch could have shifted the indices under a newly
+        // completed analysis, exporting the wrong one.
         String currentUri = HintsService.getCurrentFileUri();
-        List<HintsService.HistoryEntry> history = HintsService.getHistoryForUri(currentUri);
         int selectedVersion = historyCombo.getSelectedIndex();
-        boolean browsingHistory = selectedVersion > 0 && selectedVersion < history.size();
+        boolean browsingHistory = selectedVersion > 0 && selectedVersion < renderedHistory.size();
         String markdown = browsingHistory
-                ? history.get(selectedVersion).markdown()
+                ? renderedHistory.get(selectedVersion).markdown()
                 : HintsService.getMarkdown();
         if (markdown.isBlank()) {
             statusLabel.setText("Nothing to export yet");
@@ -1100,8 +1113,8 @@ public class HintsPanel extends JPanel {
      *   clearly delimited from prose. Code blocks arrive as div.code-block
      *   elements, not pre: MarkdownParser rewrites them because Swing's
      *   HTML renderer never wraps pre content, which gave the panel a
-     *   horizontal scroll bar whenever a code line was wider than the
-     *   tool window.
+     *   horizontal scroll bar whenever a code line was wider than the tool
+     *   window.
      * - The "Copy" button at the top right of every code block is styled
      *   here: div.copy-row right-aligns the button (Swing's HTML renderer
      *   supports neither absolute positioning nor floats, so the button
