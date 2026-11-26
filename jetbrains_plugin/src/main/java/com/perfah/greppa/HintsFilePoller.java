@@ -15,6 +15,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import org.eclipse.lsp4j.Position;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -25,14 +26,26 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Polls the LSP server's Markdown analysis files and updates the tool window.
- * The Rust server writes one file per analyzed file to
- * %GREPPA_HINTS_DIR%/greppa-hints/&lt;sanitized-uri&gt;.md
- * (or %TEMP%/greppa-hints on Windows, /tmp/greppa-hints elsewhere).
- * The first line of each file is a hidden marker that names the analyzed
- * file's URI; the rest of the file is the Markdown document.
+ * The Rust server writes one file per analyzed file to the project's hints
+ * directory (see hintsDirFor): <tmp>/greppa/<project>, or
+ * $GREPPA_HINTS_DIR/greppa/<project> when the IDE was started with the
+ * environment variable set. The first line of each file is a hidden marker
+ * that names the analyzed file's URI; the rest of the file is the Markdown
+ * document.
+ *
+ * The hints directory is per-project: every project's poller watches its
+ * own directory, and the project's LSP server writes to the directory the
+ * server descriptor passed it as GREPPA_HINTS_DIR (see
+ * GreppaLspServerDescriptor.createCommandLine), so with two projects open
+ * side by side neither project consumes the other's trigger files or
+ * analyses. Before the directory was per-project, all projects shared one
+ * directory and every project's server polled the same tick.trigger and
+ * pause.trigger - a Pause click was consumed by whichever server polled
+ * first and could pause the other project's server.
  *
  * A file is only re-read when its last-modified timestamp changes, so the UI
  * refreshes only when the server actually wrote a new analysis (file open,
@@ -77,7 +90,17 @@ public class HintsFilePoller implements Runnable {
      */
     private static final int QUIET_POLLS_TO_COMPLETE = 4;
 
-    private static HintsFilePoller instance;
+    /**
+     * The running pollers by their project's hints directory, so the static
+     * entry points (pollNow, writeTriggerFile, writePauseFile) can reach
+     * the poller - and the directory - of one specific project. One poller
+     * exists per open project (see
+     * HintsToolWindowFactory.createToolWindowContent). Keyed by the
+     * directory path, which is unique per project, and not by the Project
+     * object, so removing a stopped poller holds no reference to a closed
+     * project.
+     */
+    private static final Map<String, HintsFilePoller> pollersByHintsDir = new ConcurrentHashMap<>();
 
     private final Path hintsDir;
     private final Map<Path, Long> processedTimestamps = new HashMap<>();
@@ -90,13 +113,18 @@ public class HintsFilePoller implements Runnable {
     private final Map<Path, PendingAnalysis> pendingByPath = new HashMap<>();
     private volatile boolean running = true;
 
-    public HintsFilePoller() {
-        this.hintsDir = getHintsDir();
+    /**
+     * Creates the poller for one project's hints directory (see
+     * hintsDirFor), which the poller watches for that project's analysis
+     * files and error file.
+     */
+    public HintsFilePoller(@NotNull Project project) {
+        this.hintsDir = hintsDirFor(project);
         LOG.info("HintsFilePoller watching directory: " + this.hintsDir.toAbsolutePath());
     }
 
     public void start() {
-        instance = this;
+        pollersByHintsDir.put(hintsDir.toString(), this);
         Thread thread = new Thread(this, "Greppa analysis poller");
         thread.setDaemon(true);
         thread.start();
@@ -104,26 +132,51 @@ public class HintsFilePoller implements Runnable {
 
     public void stop() {
         running = false;
+        pollersByHintsDir.remove(hintsDir.toString(), this);
     }
 
     /**
      * Entry point of the Analyze button: re-reads the analysis files
      * already on disk (picking up anything the poll loop has not
      * forwarded yet, and the only option when no LSP server is running)
-     * and asks the server to generate a new analysis of the currently
-     * selected file. The new analysis is picked up by the regular
-     * polling loop shortly after the server writes it, and its finished
-     * document becomes the file's newest history entry (see
+     * and asks the project's LSP server to generate a new analysis of the
+     * project's currently selected file. The new analysis is picked up by
+     * the regular polling loop shortly after the server writes it, and its
+     * finished document becomes the file's newest history entry (see
      * HintsService.completeMarkdownForUri).
      */
-    public static void pollNow() {
-        HintsFilePoller poller = instance;
+    public static void pollNow(@NotNull Project project) {
+        HintsFilePoller poller = pollersByHintsDir.get(hintsDirFor(project).toString());
         if (poller != null) {
             poller.forcePoll();
         } else {
-            LOG.warn("HintsFilePoller.pollNow called before poller started");
+            LOG.warn("HintsFilePoller.pollNow called before the poller for " + project.getName() + " started");
         }
-        requestForceTick();
+        requestForceTick(project);
+    }
+
+    /**
+     * The project-less variant of pollNow: resolves the project of the
+     * currently selected file and delegates to it. For callers that have
+     * no project of their own, like the tool window title bar's reload
+     * action (see RefreshHintsAction); the panels pass their project
+     * explicitly (see pollNow(Project)).
+     */
+    public static void pollNow() {
+        String uri = HintsService.getCurrentFileUri();
+        if (uri == null) {
+            LOG.warn("HintsFilePoller.pollNow called but no file is selected");
+            return;
+        }
+        VirtualFile file = VirtualFileManager.getInstance().findFileByUrl(uri);
+        Project project = file != null
+                ? ProjectLocator.getInstance().guessProjectForFile(file)
+                : null;
+        if (project == null) {
+            LOG.warn("HintsFilePoller.pollNow: no project found for " + uri);
+            return;
+        }
+        pollNow(project);
     }
 
     @Override
@@ -272,8 +325,9 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Asks the Rust LSP server to generate a new analysis of the currently
-     * selected file by writing a trigger file. The server polls for the
+     * Asks the project's Rust LSP server to generate a new analysis of
+     * the project's currently selected file by writing a trigger file
+     * into the project's hints directory. The server polls for the
      * file and runs a forced tick (bypassing its duplicate check), so the
      * Analyze button always produces a new analysis.
      *
@@ -285,15 +339,15 @@ public class HintsFilePoller implements Runnable {
      * reads it back for its status label; from any other thread it is
      * queued onto the EDT as before.
      */
-    private static void requestForceTick() {
+    private static void requestForceTick(@NotNull Project project) {
         Runnable request = () -> {
-            String uri = HintsService.getCurrentFileUri();
+            String uri = HintsService.getCurrentFileUri(project);
             if (uri == null) {
-                LOG.info("Force tick requested but no file is selected");
+                LOG.info("Force tick requested but no file is selected in project " + project.getName());
                 return;
             }
-            Position caretPosition = HintsService.getCurrentCaretPosition();
-            writeTriggerFile(uri, caretPosition, HintsService.getTopic(), true);
+            Position caretPosition = HintsService.getCurrentCaretPosition(project);
+            writeTriggerFile(uri, caretPosition, HintsService.getTopic(), true, project);
         };
         if (ApplicationManager.getApplication().isDispatchThread()) {
             request.run();
@@ -303,13 +357,19 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Writes a trigger file that the Rust LSP server picks up to run a tick
-     * for the given file. This is the primary trigger mechanism for tab
-     * switches and the Analyze button: the custom LSP notifications
+     * Writes a trigger file that the project's Rust LSP server picks up to
+     * run a tick for the given file. This is the primary trigger mechanism
+     * for tab switches and the Analyze button: the custom LSP notifications
      * (custom/didSwitchFile, custom/forceTick) cannot be sent because the
      * IDE's running-server registry is never populated (the platform does
      * not call LspServerDescriptor.createLspServerListener in this build),
      * so the trigger file bypasses the LSP connection entirely.
+     *
+     * The file goes into the given project's own hints directory (see
+     * hintsDirFor), so only that project's server - the one the descriptor
+     * launched with the same directory - polls it; with two projects open
+     * side by side, one project's trigger can never be consumed by the
+     * other project's server.
      *
      * The file is a small JSON document in the hints directory:
      *   {"uri": "...", "line": N, "character": N, "topic": "...", "force": true,
@@ -339,14 +399,16 @@ public class HintsFilePoller implements Runnable {
      * @param caretPosition the caret position, or null when unknown
      * @param topic         the topic/goal, or an empty string when none
      * @param force         true to bypass the server's duplicate check
+     * @param project       the project whose hints directory - and whose
+     *                      server - the trigger goes to
      */
-    public static void writeTriggerFile(String uri, Position caretPosition, String topic, boolean force) {
+    public static void writeTriggerFile(String uri, Position caretPosition, String topic, boolean force, @NotNull Project project) {
         // The trigger moment, recorded before anything below can fail: the
         // file's next analysis completion consumes it as the history entry's
         // timestamp (see HintsService.completeMarkdownForUri).
         HintsService.noteAnalysisTriggered(uri);
         try {
-            Path dir = getHintsDir();
+            Path dir = hintsDirFor(project);
             Files.createDirectories(dir);
 
             StringBuilder json = new StringBuilder();
@@ -489,10 +551,14 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Writes the pause file that tells the Rust LSP server to pause or
-     * resume its analyses and completions; see writeTriggerFile for why
-     * the LSP connection cannot be used (the running-server registry is
-     * never populated in this build).
+     * Writes the pause file that tells the project's Rust LSP server to
+     * pause or resume its analyses and completions; see writeTriggerFile
+     * for why the LSP connection cannot be used (the running-server
+     * registry is never populated in this build).
+     *
+     * The file goes into the given project's own hints directory, so only
+     * that project's server pauses or resumes; pausing one project leaves
+     * another project's server running.
      *
      * The file is a small JSON document in the hints directory:
      *   {"paused": true}
@@ -502,11 +568,13 @@ public class HintsFilePoller implements Runnable {
      * is atomic (tmp+rename) so the server never reads a partially
      * written file.
      *
-     * @param paused true to pause analyses and completions, false to resume
+     * @param paused  true to pause analyses and completions, false to resume
+     * @param project the project whose hints directory - and whose
+     *                server - the pause file goes to
      */
-    public static void writePauseFile(boolean paused) {
+    public static void writePauseFile(boolean paused, @NotNull Project project) {
         try {
-            Path dir = getHintsDir();
+            Path dir = hintsDirFor(project);
             Files.createDirectories(dir);
 
             String json = "{\"paused\":" + paused + "}";
@@ -564,16 +632,47 @@ public class HintsFilePoller implements Runnable {
     }
 
     /**
-     * Returns the hints directory that both the IDE poller and the Rust
-     * server agree on: $GREPPA_HINTS_DIR/greppa-hints, or
-     * &lt;tmp&gt;/greppa-hints when the environment variable is not set.
+     * Returns the project's hints directory: the directory in the temp
+     * filesystem where the project's LSP server writes its analysis files
+     * and where the IDE writes the trigger files the server polls. The
+     * layout is <root>/greppa/<project>, where <root> is the
+     * GREPPA_HINTS_DIR environment variable when the IDE was started
+     * with it set and the system temp directory otherwise, and
+     * <project> is the project's folder name (see projectFolder). The
+     * server descriptor passes the returned directory to the project's
+     * LSP server as GREPPA_HINTS_DIR, which the server uses verbatim as
+     * its hints directory (see hints_dir in main.rs), so both sides
+     * agree on every platform - the JVM's java.io.tmpdir and a
+     * hardcoded /tmp would disagree on macOS - and two projects never
+     * share a directory.
      */
-    private static Path getHintsDir() {
+    public static Path hintsDirFor(@NotNull Project project) {
         String envDir = System.getenv("GREPPA_HINTS_DIR");
         String baseDir = (envDir != null && !envDir.isEmpty())
                 ? envDir
                 : System.getProperty("java.io.tmpdir");
-        return Paths.get(baseDir, "greppa-hints");
+        return Paths.get(baseDir, "greppa", projectFolder(project));
+    }
+
+    /**
+     * Returns the project's folder name inside the hints root: the
+     * project's name with every character that is unsafe in a file name
+     * replaced by '_', followed by a '-' and the stable hash of the
+     * project's base path (or of its name when it has no base path).
+     * The hash keeps two projects with the same name - two checkouts of
+     * one repository, for instance - in separate directories, and it is
+     * stable across IDE restarts, so the project keeps its directory
+     * from session to session.
+     */
+    private static String projectFolder(@NotNull Project project) {
+        String name = project.getName();
+        if (name == null || name.isBlank()) {
+            name = "project";
+        }
+        String sanitized = name.replaceAll("[^A-Za-z0-9._-]", "_");
+        String identity = project.getBasePath();
+        String hash = Integer.toHexString((identity != null ? identity : name).hashCode());
+        return sanitized + "-" + hash;
     }
 
     /**

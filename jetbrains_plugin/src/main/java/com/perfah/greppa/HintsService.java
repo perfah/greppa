@@ -32,8 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * registered via completeMarkdownForUri once the poller sees the analysis
  * file has stopped changing.
  *
- * While a stream is in progress, getMarkdown() does not return the partial
- * document verbatim. It merges it with the file's newest completed
+ * While a stream is in progress, getMarkdown(Project) does not return the
+ * partial document verbatim. It merges it with the file's newest completed
  * analysis: every section that has fully streamed in replaces its old
  * version, while the sections that have not streamed (yet) keep showing
  * their old content. The panel therefore never blanks and never shows a
@@ -126,14 +126,17 @@ public class HintsService {
     private static volatile String topic = "";
 
     /**
-     * Whether the LSP server's analyses and completions are paused via the
-     * tool window's Pause button. Session-wide state like the topic; the
-     * authoritative flag lives in the LSP server (notified through the
-     * pause file), this copy only restores the button state when the
-     * panel is recreated. Not persisted: a fresh IDE session always
-     * starts resumed.
+     * Whether the project's LSP server analyses and completions are
+     * paused via the tool window's Pause button, keyed by the project's
+     * hints directory (see HintsFilePoller.hintsDirFor) - the same
+     * directory the pause file that carries the flag to the server goes
+     * to. The authoritative flag lives in the project's LSP server; this
+     * copy only restores the button state when the panel is recreated.
+     * Per project, so pausing one project does not touch another
+     * project's server or buttons. Not persisted: a fresh IDE session
+     * always starts resumed.
      */
-    private static volatile boolean paused = false;
+    private static final Map<String, Boolean> pausedByProjectDir = new ConcurrentHashMap<>();
 
     /**
      * The last error message the LSP server reported (the LLM service
@@ -452,21 +455,32 @@ public class HintsService {
     }
 
     /**
-     * Pauses or resumes the LSP server's analyses and completions by
-     * writing the pause file the server polls for (see
+     * Pauses or resumes the project's LSP server's analyses and
+     * completions by writing the pause file the server polls for into
+     * the project's own hints directory (see
      * HintsFilePoller.writePauseFile). While paused the server runs no
      * analysis ticks and returns no completion items, so no LLM tokens
-     * are spent; the displayed analysis is left exactly as it is.
+     * are spent; the displayed analysis is left exactly as it is. The
+     * state is recorded per project, so other projects' Pause buttons
+     * and servers are unaffected.
      */
-    public static void setPaused(boolean value) {
-        paused = value;
-        LOG.info("HintsService.setPaused: " + (value ? "paused" : "resumed"));
-        HintsFilePoller.writePauseFile(value);
+    public static void setPaused(boolean value, @NotNull Project project) {
+        String projectDir = HintsFilePoller.hintsDirFor(project).toString();
+        if (value) {
+            pausedByProjectDir.put(projectDir, Boolean.TRUE);
+        } else {
+            pausedByProjectDir.remove(projectDir);
+        }
+        LOG.info("HintsService.setPaused: " + (value ? "paused" : "resumed")
+                + " (" + project.getName() + ")");
+        HintsFilePoller.writePauseFile(value, project);
     }
 
-    /** Returns whether analyses and completions are paused. */
-    public static boolean isPaused() {
-        return paused;
+    /**
+     * Returns whether the project's analyses and completions are paused.
+     */
+    public static boolean isPaused(@NotNull Project project) {
+        return Boolean.TRUE.equals(pausedByProjectDir.get(HintsFilePoller.hintsDirFor(project).toString()));
     }
 
     /**
@@ -493,12 +507,14 @@ public class HintsService {
 
     /**
      * Returns the Markdown analysis document for the currently selected
-     * file, or an empty string if none is available: the file's newest
-     * analysis, merged with the partial document while an analysis is
-     * streaming; see the class comment.
+     * file of the given project, or an empty string if none is
+     * available: the file's newest analysis, merged with the partial
+     * document while an analysis is streaming; see the class comment.
+     * The panels are per-project, so each panel asks for its own
+     * project's current file (see HintsPanel.refresh).
      */
-    public static synchronized String getMarkdown() {
-        String currentUri = getCurrentFileUri();
+    public static synchronized String getMarkdown(@NotNull Project project) {
+        String currentUri = getCurrentFileUri(project);
         if (currentUri == null) {
             LOG.debug("HintsService.getMarkdown: no current file URI");
             return "";
@@ -614,29 +630,39 @@ public class HintsService {
     }
 
     /**
-     * Notifies the listeners only when the given normalized URI is the file
-     * currently selected in the editor.
+     * Notifies the listeners only when the given normalized URI is the
+     * file currently selected in some open project.
      *
-     * The poller forwards every analysis file the server writes, including
-     * files that are not open in the editor right now; notifying for those
-     * made the panel refresh with unchanged content, which looked like the
-     * page randomly updating on its own. The analysis is still stored
-     * regardless, so it appears when the user switches to that file: the
-     * selection listener registered in initForProject then triggers the
-     * refresh.
+     * The poller forwards every analysis file the server writes,
+     * including files that are not open in the editor right now;
+     * notifying for those made the panel refresh with unchanged
+     * content, which looked like the page randomly updating on its
+     * own. The analysis is still stored regardless, so it appears when
+     * the user switches to that file: the selection listener
+     * registered in initForProject then triggers the refresh.
      *
-     * The check runs on the EDT because it queries the FileEditorManager,
-     * while updateMarkdownForUri is called from the poller thread.
+     * The check runs on the EDT because it queries the
+     * FileEditorManager, while updateMarkdownForUri is called from the
+     * poller thread. Every project's current file counts: the panels
+     * are per-project and each renders its own project's selection
+     * (see HintsPanel.refresh), so an analysis completing for any
+     * project's current file must reach that project's panels - the
+     * other projects' panels simply find nothing changed and skip the
+     * re-render.
      */
     private static void notifyListenersIfCurrentFile(String normalizedUri) {
         ApplicationManager.getApplication().invokeLater(() -> {
-            String currentUri = normalizeUri(getCurrentFileUri());
-            if (normalizedUri.equals(currentUri)) {
-                notifyListeners();
-            } else {
-                LOG.debug("HintsService: analysis is for non-selected file " + normalizedUri
-                        + ", skipping notification");
+            for (Project project : ProjectManager.getInstance().getOpenProjects()) {
+                if (project.isDisposed()) {
+                    continue;
+                }
+                if (normalizedUri.equals(normalizeUri(getCurrentFileUri(project)))) {
+                    notifyListeners();
+                    return;
+                }
             }
+            LOG.debug("HintsService: analysis is for non-selected file " + normalizedUri
+                    + ", skipping notification");
         });
     }
 
@@ -691,11 +717,13 @@ public class HintsService {
     }
 
     /**
-     * Returns the URL of the file currently selected in the editor, or null
-     * if no file is open. Public so HintsFilePoller can target the
-     * custom/forceTick notification at the file the user is currently
-     * looking at. Must be called on the EDT because it queries the
-     * FileEditorManager.
+     * Returns the URL of the file currently selected in the editor of
+     * the first open project with a selection, or null if no file is
+     * open. For project-less callers (the save keystroke dispatcher,
+     * the project-less pollNow); the per-project code resolves its own
+     * project's selection instead, so each project's panel and triggers
+     * follow that project (see getCurrentFileUri(Project)). Must be
+     * called on the EDT because it queries the FileEditorManager.
      */
     @Nullable
     public static String getCurrentFileUri() {
@@ -713,25 +741,39 @@ public class HintsService {
     }
 
     /**
-     * Returns the caret position of the currently selected text editor as
-     * an LSP position (0-based line and column), or null when the selected
-     * file has no text editor or no file is open. Used by the custom
-     * didSwitchFile and forceTick notifications so the analysis can mark
-     * the segment containing the cursor. Must be called on the EDT because
-     * it queries the FileEditorManager.
+     * Returns the URL of the file currently selected in the given
+     * project's editor, or null when the project is disposed or has no
+     * file open. The per-project variant of getCurrentFileUri(): the
+     * tool window panels and the trigger writers use it so each project
+     * follows its own selection. Must be called on the EDT because it
+     * queries the FileEditorManager.
      */
     @Nullable
-    public static Position getCurrentCaretPosition() {
-        Project[] projects = ProjectManager.getInstance().getOpenProjects();
-        for (Project project : projects) {
-            if (project.isDisposed()) {
-                continue;
-            }
-            Editor editor = FileEditorManager.getInstance(project).getSelectedTextEditor();
-            if (editor != null) {
-                LogicalPosition caret = editor.getCaretModel().getLogicalPosition();
-                return new Position(caret.line, caret.column);
-            }
+    public static String getCurrentFileUri(@NotNull Project project) {
+        if (project.isDisposed()) {
+            return null;
+        }
+        VirtualFile[] selectedFiles = FileEditorManager.getInstance(project).getSelectedFiles();
+        return selectedFiles.length > 0 ? selectedFiles[0].getUrl() : null;
+    }
+
+    /**
+     * Returns the caret position of the given project's selected text
+     * editor as an LSP position (0-based line and column), or null when
+     * the project is disposed, its selected file has no text editor or
+     * no file is open. Used by the trigger writers so the analysis can
+     * mark the segment containing the cursor. Must be called on the EDT
+     * because it queries the FileEditorManager.
+     */
+    @Nullable
+    public static Position getCurrentCaretPosition(@NotNull Project project) {
+        if (project.isDisposed()) {
+            return null;
+        }
+        Editor editor = FileEditorManager.getInstance(project).getSelectedTextEditor();
+        if (editor != null) {
+            LogicalPosition caret = editor.getCaretModel().getLogicalPosition();
+            return new Position(caret.line, caret.column);
         }
         return null;
     }

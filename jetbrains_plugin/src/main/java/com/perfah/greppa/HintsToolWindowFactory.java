@@ -66,18 +66,18 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
         // settings (see GreppaSettingsState.showEtcTab), because a
         // correctly generated analysis leaves it empty.
         List<String> interpretSectionNames = interpretSections();
-        HintsPanel interpretPanel = new HintsPanel(interpretSectionNames);
+        HintsPanel interpretPanel = new HintsPanel(interpretSectionNames, false, project);
         Content interpretContent = ContentFactory.getInstance()
                 .createContent(interpretPanel, "Interpret", false);
 
         List<String> improveSectionNames = improveSections();
-        HintsPanel improvePanel = new HintsPanel(improveSectionNames);
+        HintsPanel improvePanel = new HintsPanel(improveSectionNames, false, project);
         Content improveContent = ContentFactory.getInstance()
                 .createContent(improvePanel, "Improve", false);
 
-        ImportsPanel importsPanel = new ImportsPanel();
+        ImportsPanel importsPanel = new ImportsPanel(project);
         List<String> relateSectionNames = relateSections();
-        HintsPanel relatePanel = new HintsPanel(relateSectionNames);
+        HintsPanel relatePanel = new HintsPanel(relateSectionNames, false, project);
         Content relateContent = ContentFactory.getInstance()
                 .createContent(buildRelateTab(importsPanel, relatePanel), "Relate", false);
 
@@ -99,7 +99,7 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
             List<String> matchedSectionNames = new ArrayList<>(interpretSectionNames);
             matchedSectionNames.addAll(improveSectionNames);
             matchedSectionNames.addAll(relateSectionNames);
-            etcPanel = new HintsPanel(matchedSectionNames, true);
+            etcPanel = new HintsPanel(matchedSectionNames, true, project);
             etcContent = ContentFactory.getInstance().createContent(etcPanel, "Etc", false);
         }
 
@@ -160,7 +160,10 @@ public class HintsToolWindowFactory implements ToolWindowFactory {
                 new LspTabSelectionListener()
         );
 
-        poller = new HintsFilePoller();
+        // The poller watches this project's own hints directory (see
+        // HintsFilePoller.hintsDirFor), so each project's poller forwards
+        // only its own server's analyses and triggers.
+        poller = new HintsFilePoller(project);
         poller.start();
 
         toolWindow.getContentManager().addContentManagerListener(new com.intellij.ui.content.ContentManagerListener() {

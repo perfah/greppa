@@ -234,6 +234,19 @@ public class HintsPanel extends JPanel {
     private List<String> codeBlocks = new ArrayList<>();
 
     /**
+     * The project this panel belongs to: the tool window creates one
+     * panel per tab, per project (see
+     * HintsToolWindowFactory.createToolWindowContent). The project
+     * decides the per-project parts of the panel's behavior - which
+     * project's currently selected file the panel shows the analysis of
+     * (see HintsService.getCurrentFileUri(Project)), which project's
+     * hints directory the Analyze button's trigger and the Pause
+     * button's pause file go to, and which project the export dialog is
+     * parented to.
+     */
+    private final Project project;
+
+    /**
      * The sections of the analysis this panel shows, matched against the
      * document's ## headings (see HintsService.filterSections). Every tab
      * of the tool window passes its own subset, so all tabs render the
@@ -249,14 +262,16 @@ public class HintsPanel extends JPanel {
      */
     private final boolean unmatchedOnly;
 
-    public HintsPanel(List<String> sectionNames) {
-        this(sectionNames, false);
-    }
-
-    public HintsPanel(List<String> sectionNames, boolean unmatchedOnly) {
+    /**
+     * Creates one tab's panel. The tool window factory creates one panel
+     * per tab, all for the same project; the project decides the
+     * per-project parts of the panel's behavior (see the project field).
+     */
+    public HintsPanel(List<String> sectionNames, boolean unmatchedOnly, Project project) {
         super(new BorderLayout());
         this.sectionNames = List.copyOf(sectionNames);
         this.unmatchedOnly = unmatchedOnly;
+        this.project = project;
         setBorder(new EmptyBorder(8, 8, 8, 8));
 
         // Every tab's Focus field renders the one shared document, so the
@@ -490,12 +505,12 @@ public class HintsPanel extends JPanel {
      * each character typed, which is exactly what the explicit apply
      * avoids.
      *
-     * The strip also holds the Pause button, which stops the LSP server's
-     * analyses and completions until it is toggled off again, the Analyze
-     * button, which is disabled while paused because the server skips
-     * every tick then (see setPaused), and the Export button, which
-     * writes the currently shown markdown document to a file (see
-     * exportMarkdown).
+     * The strip also holds the Pause button, which stops this project's
+     * LSP server's analyses and completions until it is toggled off
+     * again, the Analyze button, which is disabled while paused because
+     * the server skips every tick then (see setPaused), and the Export
+     * button, which writes the currently shown markdown document to a
+     * file (see exportMarkdown).
      */
     private JPanel buildTopicPanel() {
         JPanel panel = new JPanel(new BorderLayout(4, 0));
@@ -623,8 +638,9 @@ public class HintsPanel extends JPanel {
 
     /**
      * Stores the field's text as the current topic and asks the server for
-     * a new analysis of the current file, so the new topic takes effect
-     * immediately instead of only on the next file change or tab switch.
+     * a new analysis of the project's currently selected file, so the new
+     * topic takes effect immediately instead of only on the next file
+     * change or tab switch.
      *
      * Called by the Analyze button and by pressing Enter in the topic
      * field; typing alone never triggers anything, so the LLM is never
@@ -662,22 +678,22 @@ public class HintsPanel extends JPanel {
         // start (a trigger lost to the server's startup races; see
         // HintsFilePoller.writeTriggerFile): it stays on this
         // confirmation instead of advancing to a loaded analysis.
-        HintsFilePoller.pollNow();
-        String uri = HintsService.getCurrentFileUri();
+        HintsFilePoller.pollNow(project);
+        String uri = HintsService.getCurrentFileUri(project);
         long triggeredAt = HintsService.getAnalysisTriggeredAt(uri);
         statusLabel.setText("Analysis triggered: " + historyIdentifier(triggeredAt, topic));
     }
 
     /**
      * Sets the pause button's selection and label, and the Analyze
-     * button's enabled state, from the current pause state. Called from
-     * refresh, so a panel recreated while paused shows "Unpause" and a
-     * disabled Analyze button instead of a selected button still reading
-     * "Pause", and the tabs stay consistent when the pause is toggled on
-     * another tab.
+     * button's enabled state, from the current pause state of this
+     * panel's project. Called from refresh, so a panel recreated while
+     * paused shows "Unpause" and a disabled Analyze button instead of a
+     * selected button still reading "Pause", and the tabs stay
+     * consistent when the pause is toggled on another tab.
      */
     private void syncPauseButton() {
-        boolean paused = HintsService.isPaused();
+        boolean paused = HintsService.isPaused(project);
         pauseButton.setSelected(paused);
         pauseButton.setText(paused ? "Unpause" : "Pause");
         // Analyze generates a new analysis, and the server skips every
@@ -688,10 +704,11 @@ public class HintsPanel extends JPanel {
     }
 
     /**
-     * Pauses or resumes the LSP server's analyses and completions. The
-     * state is stored in HintsService (so a recreated panel restores the
-     * button) and written to the pause file the Rust server polls for;
-     * see HintsFilePoller.writePauseFile.
+     * Pauses or resumes this project's LSP server's analyses and
+     * completions. The state is stored per project in HintsService (so a
+     * recreated panel restores the button) and written to the pause file
+     * in the project's own hints directory, which only that project's
+     * Rust server polls; see HintsFilePoller.writePauseFile.
      *
      * The button's label always names the action a click will perform:
      * "Pause" while analyses run, "Unpause" while they are paused. The
@@ -704,13 +721,14 @@ public class HintsPanel extends JPanel {
      * next refresh.
      *
      * While paused the panel keeps showing the current analysis: the
-     * server runs no ticks, so no new analysis files appear and the
-     * poller has nothing new to forward. Resuming makes the server
-     * re-analyze the current file immediately, so the status text is
-     * replaced as soon as that analysis arrives.
+     * server runs no ticks, so no new analysis files appear in the
+     * project's hints directory and the poller has nothing new to
+     * forward. Resuming makes the server re-analyze the current file
+     * immediately, so the status text is replaced as soon as that
+     * analysis arrives.
      */
     private void setPaused(boolean paused) {
-        HintsService.setPaused(paused);
+        HintsService.setPaused(paused, project);
         pauseButton.setText(paused ? "Unpause" : "Pause");
         analyzeButton.setEnabled(!paused);
         statusLabel.setText(paused ? "Paused - no analysis or completions" : "Resumed");
@@ -726,11 +744,12 @@ public class HintsPanel extends JPanel {
      * was clicked on. The save dialog opens at the analyzed file's
      * directory and suggests a name derived from it (see
      * suggestedFileName), so the export lands next to the code by
-     * default. Runs on the EDT (button click); the dialog is modal and
-     * the write is one small file operation, so no background threading
-     * is needed. The status label confirms the export - or why nothing
-     * was exported - because the file chooser itself gives no feedback
-     * inside the panel; the next refresh overwrites the label as usual.
+     * default, and it is parented to the panel's project. Runs on the
+     * EDT (button click); the dialog is modal and the write is one small
+     * file operation, so no background threading is needed. The status
+     * label confirms the export - or why nothing was exported - because
+     * the file chooser itself gives no feedback inside the panel; the
+     * next refresh overwrites the label as usual.
      *
      * The selected entry is resolved against renderedHistory - the very
      * list the combo's items were built from, like the combo's own
@@ -749,12 +768,12 @@ public class HintsPanel extends JPanel {
         // so the export is always the entry the combo shows; a fresh
         // history fetch could have shifted the indices under a newly
         // completed analysis, exporting the wrong one.
-        String currentUri = HintsService.getCurrentFileUri();
+        String currentUri = HintsService.getCurrentFileUri(project);
         int selectedVersion = historyCombo.getSelectedIndex();
         boolean browsingHistory = selectedVersion > 0 && selectedVersion < renderedHistory.size();
         String markdown = browsingHistory
                 ? renderedHistory.get(selectedVersion).markdown()
-                : HintsService.getMarkdown();
+                : HintsService.getMarkdown(project);
         if (markdown.isBlank()) {
             statusLabel.setText("Nothing to export yet");
             return;
@@ -768,7 +787,7 @@ public class HintsPanel extends JPanel {
         FileSaverDescriptor descriptor = new FileSaverDescriptor(
                 "Export analysis", "Save the markdown document", "md");
         FileSaverDialog dialog = FileChooserFactory.getInstance()
-                .createSaveFileDialog(descriptor, currentProject());
+                .createSaveFileDialog(descriptor, project);
         VirtualFileWrapper wrapper = dialog.save(file == null ? null : file.getParent(),
                 suggestedFileName(file));
         if (wrapper == null) {
@@ -780,19 +799,6 @@ public class HintsPanel extends JPanel {
         } catch (IOException e) {
             statusLabel.setText("Export failed: " + e.getMessage());
         }
-    }
-
-    /**
-     * Returns the first open, non-disposed project, or null when none is
-     * open; the save dialog is parented to it.
-     */
-    private static Project currentProject() {
-        for (Project project : ProjectManager.getInstance().getOpenProjects()) {
-            if (!project.isDisposed()) {
-                return project;
-            }
-        }
-        return null;
     }
 
     /**
@@ -814,13 +820,13 @@ public class HintsPanel extends JPanel {
 
     public void refresh() {
         SwingUtilities.invokeLater(() -> {
-            // The analyses of the selected file, newest first, and
-            // whether the history combo must be rebuilt: the file
+            // The analyses of the project's selected file, newest first,
+            // and whether the history combo must be rebuilt: the file
             // changed, a new analysis completed, or the analyses were
             // cleared. All of these shift the entry indices, so the
             // combo is rebuilt and the selection resets to the newest
             // analysis.
-            String currentUri = HintsService.getCurrentFileUri();
+            String currentUri = HintsService.getCurrentFileUri(project);
             List<HintsService.HistoryEntry> history = HintsService.getHistoryForUri(currentUri);
             boolean historyChanged = !Objects.equals(currentUri, renderedHistoryUri)
                     || !Objects.equals(history, renderedHistory);
@@ -837,10 +843,10 @@ public class HintsPanel extends JPanel {
             int selectedVersion = historyCombo.getSelectedIndex();
             boolean browsingHistory = selectedVersion > 0 && selectedVersion < history.size();
 
-            // The pause state is global (HintsService), but every tab has
-            // its own panel with its own copy of the controls; sync the
-            // pause button on every refresh so a pause toggled on one tab
-            // is reflected on the other tabs. The topic field needs no
+            // The pause state is per project (HintsService), but every tab
+            // has its own panel with its own copy of the controls; sync
+            // the pause button on every refresh so a pause toggled on one
+            // tab is reflected on the other tabs. The topic field needs no
             // syncing: all tabs' fields share one document (see
             // SHARED_TOPIC_DOCUMENT), and refresh must not write it - the
             // field's value changes only when the user types in it or
@@ -857,7 +863,7 @@ public class HintsPanel extends JPanel {
 
             String document = browsingHistory
                     ? history.get(selectedVersion).markdown()
-                    : HintsService.getMarkdown();
+                    : HintsService.getMarkdown(project);
             String markdown = filterDocument(document);
 
             // Skip redundant refreshes: the same Markdown often arrives

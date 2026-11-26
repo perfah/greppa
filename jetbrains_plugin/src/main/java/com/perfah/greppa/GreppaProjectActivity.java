@@ -8,6 +8,7 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectLocator;
 import com.intellij.openapi.startup.ProjectActivity;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -31,10 +32,11 @@ import javax.swing.SwingUtilities;
  * read when the events fire, so toggling it applies immediately).
  *
  * Two paths write the same tick trigger file the Analyze button uses
- * (HintsFilePoller.writeTriggerFile with force = true), so the Rust
- * LSP server picks it up within 250 ms, cancels the analysis
- * currently streaming and runs a forced tick; the finished analysis
- * is added to the file's history like every other (see
+ * (HintsFilePoller.writeTriggerFile with force = true) into the
+ * project's own hints directory, so the project's Rust LSP server picks
+ * it up within 250 ms, cancels the analysis currently streaming and
+ * runs a forced tick; the finished analysis is added to the file's
+ * history like every other (see
  * HintsService.completeMarkdownForUri):
  *
  * - FileDocumentManagerListener.beforeDocumentSaving fires for every
@@ -53,8 +55,9 @@ import javax.swing.SwingUtilities;
  *   the keystroke before the action system processes it; when the
  *   current file's document has no unsaved changes, so the save
  *   listener will not fire for it, the trigger is written for the
- *   current file with its caret. A save of changed content is left to
- *   the save listener, so one Ctrl+S still produces one trigger.
+ *   current file with its caret, into the current file's project's
+ *   hints directory. A save of changed content is left to the save
+ *   listener, so one Ctrl+S still produces one trigger.
  *
  * The keystroke is watched instead of the save actions themselves
  * because this IDE build exposes no action listener to plugins: the
@@ -144,19 +147,24 @@ public final class GreppaProjectActivity implements ProjectActivity {
                             return;
                         }
                         // The caret is only known for the file open in the
-                        // selected editor; a background file saved by Save All
-                        // gets no position, so the server analyzes it without
-                        // marking a current segment instead of attributing the
-                        // selected file's caret to it.
-                        String currentUri = HintsService.getCurrentFileUri();
+                        // selected editor of this project; a background file
+                        // saved by Save All gets no position, so the server
+                        // analyzes it without marking a current segment
+                        // instead of attributing the selected file's caret
+                        // to it.
+                        String currentUri = HintsService.getCurrentFileUri(project);
                         Position caret = currentUri != null && currentUri.equals(file.getUrl())
-                                ? HintsService.getCurrentCaretPosition()
+                                ? HintsService.getCurrentCaretPosition(project)
                                 : null;
+                        // The trigger goes into this project's own hints
+                        // directory, so this project's server re-analyzes
+                        // the saved file.
                         HintsFilePoller.writeTriggerFile(
                                 file.getUrl(),
                                 caret,
                                 HintsService.getTopic(),
-                                true
+                                true,
+                                project
                         );
                     }
                 }
@@ -269,6 +277,15 @@ public final class GreppaProjectActivity implements ProjectActivity {
         if (file == null) {
             return;
         }
+        // The project the current file belongs to decides which project's
+        // hints directory - and thus which project's server - the trigger
+        // goes to. The keystroke dispatcher is application-global and has
+        // no project of its own, so the project is resolved from the
+        // file; a file without a project has no server to trigger.
+        Project project = ProjectLocator.getInstance().guessProjectForFile(file);
+        if (project == null) {
+            return;
+        }
         Document document = FileDocumentManager.getInstance().getDocument(file);
         if (document == null) {
             return;
@@ -283,9 +300,10 @@ public final class GreppaProjectActivity implements ProjectActivity {
         }
         HintsFilePoller.writeTriggerFile(
                 currentUri,
-                HintsService.getCurrentCaretPosition(),
+                HintsService.getCurrentCaretPosition(project),
                 HintsService.getTopic(),
-                true
+                true,
+                project
         );
     }
 }

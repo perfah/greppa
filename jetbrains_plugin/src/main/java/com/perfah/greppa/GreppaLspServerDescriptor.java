@@ -15,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.nio.file.Path;
 
 public class GreppaLspServerDescriptor extends LspServerDescriptor {
 
@@ -34,8 +35,17 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
      */
     private static final String BUNDLED_SERVER_DIR = "bin";
 
+    /**
+     * The project this server is launched for. Decides the per-project
+     * parts of the command line - currently the hints directory the
+     * server and the project's IDE-side poller share (see
+     * HintsFilePoller.hintsDirFor).
+     */
+    private final Project project;
+
     public GreppaLspServerDescriptor(@NotNull Project project) {
         super(project, "Greppa");
+        this.project = project;
     }
 
     @Override
@@ -87,6 +97,18 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
         commandLine.withEnvironment("MKL_NUM_THREADS", "1");
         commandLine.withEnvironment("OMP_NUM_THREADS", "1");
         commandLine.withEnvironment("RAYON_NUM_THREADS", "1");
+        // The per-project hints directory: where this project's LSP server
+        // writes its analysis files and where the IDE writes the trigger
+        // files the server polls (see HintsFilePoller.hintsDirFor).
+        // Passed explicitly so the server uses exactly the directory the
+        // IDE-side poller watches - the JVM's java.io.tmpdir and the
+        // server's own fallback would disagree on macOS - and so that,
+        // with two projects open side by side, each project's server
+        // writes to and polls its own directory instead of both sharing
+        // one where each consumed the other's triggers.
+        Path hintsDir = HintsFilePoller.hintsDirFor(project);
+        commandLine.withEnvironment("GREPPA_HINTS_DIR", hintsDir.toString());
+        LOG.info("Setting GREPPA_HINTS_DIR to " + hintsDir);
         // The LLM service configuration. The Rust server reads
         // GREPPA_LLM_BASE_URL, GREPPA_LLM_MODEL and
         // GREPPA_LLM_API_KEY itself (both the analysis listener and the

@@ -1084,7 +1084,8 @@ async fn run_tick(state: &ServerState, force: bool) {
     }
 }
 
-/// Watches for the files the IDE writes into the hints directory:
+/// Watches for the files the IDE writes into this project's hints
+/// directory (see hints_dir):
 ///
 /// - tick.trigger: run a tick for its parameters. The IDE writes the
 ///   file when the user switches editor tabs or clicks the reload/Apply
@@ -1239,11 +1240,10 @@ async fn watch_trigger_files(state: Arc<ServerState>) {
                 // had set. Keep the file and let the next poll retry:
                 // once didOpen has landed the tick runs with the
                 // document available, and the click self-heals instead
-                // of being lost. This also steps aside for another
-                // project's server: every project runs its own server
-                // and all of them poll this same trigger file, and
-                // only the server whose LSP client synced the file can
-                // analyze it.
+                // of being lost. The trigger lives in this project's own
+                // hints directory (see hints_dir), so only this
+                // project's server polls it - the retry waits solely
+                // for this server's LSP client to sync the document.
                 if !state.documents.contains_key(&uri) {
                     if waiting_for_document.as_deref() != Some(uri.as_str()) {
                         log_message(&format!(
@@ -1732,13 +1732,21 @@ fn shorten_title(description: &str) -> String {
     format!("{}...", cut)
 }
 
+/// The project's hints directory: the analysis files, the error file and
+/// the trigger files the IDE writes all live here. The IDE's server
+/// descriptor passes the directory the project's IDE-side poller watches
+/// as GREPPA_HINTS_DIR when it launches this server (see
+/// GreppaLspServerDescriptor.createCommandLine and
+/// HintsFilePoller.hintsDirFor on the Java side), and it is used
+/// verbatim - one directory per project, so with two projects open side
+/// by side each server writes to and polls its own directory and neither
+/// consumes the other's triggers or analyses. The fallback below applies
+/// only to a server started by hand, which belongs to no project: a
+/// fixed "default" project folder under the temp root.
 fn hints_dir() -> PathBuf {
-    // The IDE-side poller (HintsFilePoller) treats GREPPA_HINTS_DIR as the
-    // base directory; honor it here too so both sides always agree on where
-    // the analysis files live.
     if let Ok(dir) = env::var("GREPPA_HINTS_DIR") {
         if !dir.is_empty() {
-            return PathBuf::from(dir).join("greppa-hints");
+            return PathBuf::from(dir);
         }
     }
 
@@ -1747,11 +1755,12 @@ fn hints_dir() -> PathBuf {
         std::env::var("TEMP")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("C:\\temp"))
-            .join("greppa-hints")
+            .join("greppa")
+            .join("default")
     }
     #[cfg(not(target_os = "windows"))]
     {
-        PathBuf::from("/tmp/greppa-hints")
+        PathBuf::from("/tmp/greppa/default")
     }
 }
 

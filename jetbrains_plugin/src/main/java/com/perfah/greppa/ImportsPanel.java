@@ -3,7 +3,6 @@ package com.perfah.greppa;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.ui.JBColor;
@@ -23,10 +22,10 @@ import java.util.Set;
  * strip at the top of the Relate tab; see HintsToolWindowFactory and
  * OpenImportsPaneAction).
  *
- * It lists the local files the currently selected file imports plus the
- * files the user added manually, one row per entry: a checkbox, the
- * import string and the resolved file path. Found files are checked by
- * default, so they attach to the analysis as context without extra
+ * It lists the local files the project's currently selected file imports
+ * plus the files the user added manually, one row per entry: a checkbox,
+ * the import string and the resolved file path. Found files are checked
+ * by default, so they attach to the analysis as context without extra
  * clicks; unchecking detaches them. The attachment content is sent with
  * every trigger file (see HintsFilePoller.writeTriggerFile) and the
  * analysis prompt renders it after the analyzed code. Checking or
@@ -67,6 +66,14 @@ import java.util.Set;
  */
 public class ImportsPanel extends JPanel {
 
+    /**
+     * The project this pane belongs to: the file whose imports the pane
+     * shows is the project's currently selected file (see
+     * HintsService.getCurrentFileUri(Project)), and the Add file chooser
+     * is parented to the project.
+     */
+    private final Project project;
+
     /** Names the file whose related files are shown. */
     private final JLabel fileLabel = new JLabel(" ");
     /** One row per import; rebuilt on refresh. */
@@ -95,8 +102,9 @@ public class ImportsPanel extends JPanel {
     /** The entries last rendered, to skip redundant rebuilds. */
     private List<HintsService.ImportEntry> renderedEntries = null;
 
-    public ImportsPanel() {
+    public ImportsPanel(Project project) {
         super(new BorderLayout(0, 4));
+        this.project = project;
         setBorder(new EmptyBorder(8, 8, 8, 8));
         rowsPanel.setLayout(new BoxLayout(rowsPanel, BoxLayout.Y_AXIS));
         add(buildToolbar(), BorderLayout.NORTH);
@@ -131,14 +139,14 @@ public class ImportsPanel extends JPanel {
     }
 
     /**
-     * The pane's Scan imports button: re-runs the local import scan for the
-     * current file. The result replaces the scanned entries; the
-     * checked state of entries that still resolve to the same file
-     * survives, and manually added files are kept (see
+     * The pane's Scan imports button: re-runs the local import scan for
+     * the project's current file. The result replaces the scanned
+     * entries; the checked state of entries that still resolve to the
+     * same file survives, and manually added files are kept (see
      * HintsService.setImportsForUri).
      */
     private void refreshImports() {
-        String uri = HintsService.getCurrentFileUri();
+        String uri = HintsService.getCurrentFileUri(project);
         if (uri == null) {
             return;
         }
@@ -149,15 +157,13 @@ public class ImportsPanel extends JPanel {
      * The Add file button: lets the user attach a file the scan missed
      * or could not resolve, e.g. a Rust use path or a dotted Java
      * import. The added file is checked immediately and survives
-     * re-scans.
+     * re-scans. The chooser is parented to the pane's project.
      */
     private void addFile() {
-        String uri = HintsService.getCurrentFileUri();
+        String uri = HintsService.getCurrentFileUri(project);
         if (uri == null) {
             return;
         }
-        Project[] projects = ProjectManager.getInstance().getOpenProjects();
-        Project project = projects.length > 0 ? projects[0] : null;
         VirtualFile file = FileChooser.chooseFile(
                 FileChooserDescriptorFactory.createSingleFileDescriptor(), project, null);
         if (file == null) {
@@ -167,13 +173,13 @@ public class ImportsPanel extends JPanel {
     }
 
     /**
-     * Rebuilds the rows when the current file or its imports changed; a
-     * no-op otherwise. The single listener registration is owned by
-     * HintsToolWindowFactory, like for the analysis panel.
+     * Rebuilds the rows when the project's current file or its imports
+     * changed; a no-op otherwise. The single listener registration is
+     * owned by HintsToolWindowFactory, like for the analysis panel.
      */
     public void refresh() {
         SwingUtilities.invokeLater(() -> {
-            String uri = HintsService.getCurrentFileUri();
+            String uri = HintsService.getCurrentFileUri(project);
             List<HintsService.ImportEntry> entries = HintsService.getImportsForUri(uri);
             // The first time the pane sees a file, scan its imports once;
             // afterwards the list only changes through the pane's Scan imports

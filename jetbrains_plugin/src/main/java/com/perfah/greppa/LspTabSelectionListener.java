@@ -3,6 +3,7 @@ package com.perfah.greppa;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.eclipse.lsp4j.Position;
 import org.jetbrains.annotations.NotNull;
@@ -12,11 +13,12 @@ import org.jetbrains.annotations.NotNull;
  * to a different editor tab, so the server re-analyzes the newly
  * selected file.
  *
- * The trigger is a small file written to the hints directory (see
- * HintsFilePoller.writeTriggerFile), which the Rust server polls for.
- * The previous approach - sending a custom custom/didSwitchFile LSP
- * notification through the running-server registry - never worked because
- * the platform does not call
+ * The trigger is a small file written to the project's own hints
+ * directory (see HintsFilePoller.writeTriggerFile and
+ * HintsFilePoller.hintsDirFor), which only that project's Rust server
+ * polls. The previous approach - sending a custom custom/didSwitchFile
+ * LSP notification through the running-server registry - never worked
+ * because the platform does not call
  * LspServerDescriptor.createLspServerListener in this IDE build, so the
  * registry stayed empty and no notification could be sent. The trigger
  * file bypasses the LSP connection entirely.
@@ -59,11 +61,15 @@ public class LspTabSelectionListener implements FileEditorManagerListener {
 
         LOG.info("LspTabSelectionListener: selection changed to " + newFile.getUrl());
 
+        // The project whose editor selection changed: its own hints
+        // directory receives the trigger, so its server - and no other
+        // project's - re-analyzes the newly selected file.
+        Project project = event.getManager().getProject();
         String fileUri = newFile.getUrl();
         // Caret position of the newly selected editor, or null when the
         // selected file has no text editor. selectionChanged runs on the
         // EDT, so the FileEditorManager query is allowed.
-        Position caretPosition = HintsService.getCurrentCaretPosition();
-        HintsFilePoller.writeTriggerFile(fileUri, caretPosition, HintsService.getTopic(), false);
+        Position caretPosition = HintsService.getCurrentCaretPosition(project);
+        HintsFilePoller.writeTriggerFile(fileUri, caretPosition, HintsService.getTopic(), false, project);
     }
 }
