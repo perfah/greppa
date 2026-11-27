@@ -32,12 +32,6 @@ pub(crate) const REVIEWING_MESSAGE: &str = "_Generating analysis..._";
 /// complete document is always sent once at the end.
 const SNAPSHOT_INTERVAL: Duration = Duration::from_millis(100);
 
-/// How long a completion request may take before giving up. A completion
-/// must feel instant; when the LLM service is busy (e.g. an analysis is
-/// streaming), it is better to return no completion than to make the
-/// completion popup wait for minutes.
-const COMPLETION_TIMEOUT: Duration = Duration::from_secs(60);
-
 /// Resolves the base URL of the LLM service's OpenAI-compatible chat
 /// completions endpoint from the environment, so no provider is
 /// assumed: any service that speaks the OpenAI API works - a local
@@ -279,10 +273,16 @@ impl StreamingTickListener for OllamaTickListener {
 /// hidden thinking before any answer text, so the completion came back
 /// empty and no suggestion appeared at all.
 ///
-/// The request is wrapped in a timeout: a completion must feel instant,
-/// and when the LLM service is busy (e.g. an analysis is streaming) it
-/// is better to return no completion than to make the completion
-/// popup wait.
+/// The request has no timeout: it waits until the model answers,
+/// however long that takes, like an analysis, whose inference has no
+/// timeout either. The request used to be wrapped in a fixed timeout
+/// because a completion must feel instant, but a reasoning-heavy model
+/// thinks for minutes before its first answer token - and a concurrent
+/// analysis queues the completion behind it, because services such as
+/// Ollama run one request at a time for large models - so the timeout
+/// abandoned exactly the completions that would have arrived late but
+/// did arrive, and no suggestion appeared at all. A completion that
+/// comes late beats one that never comes.
 ///
 /// The model regularly wraps its answer in a Markdown code fence
 /// ("```rust ... ```") even though the prompt forbids fences; inserting
@@ -338,15 +338,10 @@ pub async fn complete(
     }
     let request = request_args.build()?;
 
-    let response = match tokio::time::timeout(COMPLETION_TIMEOUT, client.chat().create(request)).await {
-        Ok(result) => result?,
-        Err(_) => {
-            return Err(anyhow::anyhow!(
-                "completion request timed out after {:?}",
-                COMPLETION_TIMEOUT
-            ));
-        }
-    };
+    // No timeout: the request waits for the model's answer however long
+    // it takes, like an analysis does; see the doc comment above for
+    // why the timeout the request used to carry was removed.
+    let response = client.chat().create(request).await?;
     let content = response
         .choices
         .first()
