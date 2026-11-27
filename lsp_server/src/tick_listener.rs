@@ -285,6 +285,25 @@ impl StreamingTickListener for OllamaTickListener {
 /// numbered code and the <CURSOR> marker, so the model only has to
 /// produce the insertion text.
 ///
+/// The returned text is what the IDE inserts in place of the current
+/// word: the identifier fragment the caret sits in (the "be" of
+/// "swarm.be"), which the IDE's completion machinery treats as the
+/// typed prefix and replaces with the selected item's text. The
+/// replaced range is neither the whole line nor nothing: the fragment
+/// starts at the last identifier boundary before the caret - a dot, a
+/// space, a bracket, the line start. The model, in contrast, is asked
+/// for the continuation from the caret, so the fragment is prepended
+/// here (see word_before_caret): the item text is the fragment plus
+/// the continuation, and the IDE's replacement of the fragment then
+/// nets out to inserting the continuation at the caret. Without the
+/// prepend, a completion continuing a partially typed word destroyed
+/// the fragment: for the half-typed "swarm.be" the model returned
+/// "haviour_mut()..." - the continuation of "behaviour" after "be" -
+/// the IDE replaced "be" with it, and the document ended up as
+/// "swarm.haviour_mut()...", the "be" vanished. The same mismatch
+/// broke the stripper's own example: the stripped "px" for
+/// "margin-right: 6" replaced the "6", producing "margin-right: px".
+///
 /// The model is the dedicated completion model when one is configured
 /// (see llm_completion_model), otherwise the analysis model: the IDE's
 /// LSP client abandons a completion request after roughly ten seconds,
@@ -383,7 +402,18 @@ pub async fn complete(
             completion.chars().count() - stripped.chars().count()
         ));
     }
-    Ok(stripped)
+    if stripped.is_empty() {
+        // A completion that is nothing but the repetition of the text
+        // before the caret carries no new text; no completion beats a
+        // suggestion that inserts nothing.
+        return Ok(String::new());
+    }
+    // The IDE inserts the item's text in place of the current word (see
+    // the doc comment), so the fragment the caret sits in is prepended:
+    // the fragment plus the continuation, replaced for the fragment,
+    // nets out to the continuation inserted at the caret.
+    let word = word_before_caret(document, position);
+    Ok(format!("{}{}", word, stripped))
 }
 
 /// Removes the Markdown code fence the model often wraps a completion in
@@ -439,6 +469,43 @@ fn text_before_caret(document: &str, position: Position) -> String {
     prefix
 }
 
+/// Returns the identifier fragment the caret sits in: the longest run of
+/// identifier characters (Unicode alphanumeric or '_') ending at the
+/// caret, or the empty string when the character before the caret is
+/// not an identifier character - a dot, a space, a bracket, or the
+/// line start. This is the fragment the IDE's completion treats as
+/// the typed prefix and replaces with the selected item's text (see
+/// complete), so the item text must start with it. LSP columns count
+/// UTF-16 code units, so the line is consumed in UTF-16 units, like
+/// text_before_caret; a column that would split a surrogate pair
+/// includes its whole character.
+fn word_before_caret(document: &str, position: Position) -> String {
+    let line = match document.lines().nth(position.line as usize) {
+        Some(line) => line,
+        None => return String::new(),
+    };
+    let mut chars: Vec<char> = Vec::new();
+    let mut units = 0u32;
+    for character in line.chars() {
+        if units >= position.character {
+            break;
+        }
+        units += character.len_utf16() as u32;
+        chars.push(character);
+    }
+    // The caret sits at an identifier boundary, so the fragment - the
+    // text the IDE replaces - is empty.
+    match chars.last() {
+        Some(&c) if c.is_alphanumeric() || c == '_' => {}
+        _ => return String::new(),
+    }
+    let mut start = chars.len();
+    while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
+        start -= 1;
+    }
+    chars[start..].iter().collect()
+}
+
 /// Strips the leading portion of a completion that duplicates the text
 /// immediately before the caret. Completion models are trained to
 /// continue a prefix and regularly re-generate the text ending at the
@@ -449,7 +516,10 @@ fn text_before_caret(document: &str, position: Position) -> String {
 /// such a repetition, so the longest overlap is removed and only the
 /// genuinely new text ("px") remains. A completion that is nothing but
 /// the repetition collapses to an empty string, which the caller
-/// treats as "no completion".
+/// treats as "no completion". The caller (complete) then prepends the
+/// identifier fragment before the caret (see word_before_caret), so a
+/// repetition reaching into that fragment - e.g. the model completing
+/// the half-typed word itself - is repaired rather than lost.
 fn strip_repeated_prefix(prefix: &str, completion: &str) -> String {
     let prefix: Vec<char> = prefix.chars().collect();
     let completion: Vec<char> = completion.chars().collect();
