@@ -50,7 +50,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-1.0.4: Miscellaneous bug fixes<br>
+1.0.4: Miscellaneous bug fixes and add a dedicated 'LLM completion model' setting for autocomplete, making it easier to stay within the IDE's 10-second timeout<br>
 1.0.3: Add an LLM max tokens setting, populate settings fields with their default values, fix inconsistent status labels before analysis loads, and stop the log file from recording file contents or growing across sessions<br>
 1.0.2: Fix white-on-white plugin icon and adjust first-time setup instructions<br>
 1.0.1: Remove usage of internal API<br>
