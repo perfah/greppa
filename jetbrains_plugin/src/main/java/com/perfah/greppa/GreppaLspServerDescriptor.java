@@ -125,6 +125,16 @@ public class GreppaLspServerDescriptor extends LspServerDescriptor {
             commandLine.withEnvironment("GREPPA_LLM_MODEL", settings.llmModel);
             LOG.info("Setting GREPPA_LLM_MODEL to " + settings.llmModel);
         }
+        // The model used for completions (autocomplete); empty means no
+        // separate completion model, so the server falls back to the
+        // analysis model above (see llm_completion_model in
+        // tick_listener.rs). Only passed when set, like the other model
+        // settings: an empty value leaves the variable unset and the
+        // fallback applies.
+        if (settings.llmCompletionModel != null && !settings.llmCompletionModel.isBlank()) {
+            commandLine.withEnvironment("GREPPA_LLM_COMPLETION_MODEL", settings.llmCompletionModel);
+            LOG.info("Setting GREPPA_LLM_COMPLETION_MODEL to " + settings.llmCompletionModel);
+        }
         String llmApiKey = settings.getLlmApiKey();
         if (!llmApiKey.isBlank()) {
             commandLine.withEnvironment("GREPPA_LLM_API_KEY", llmApiKey);

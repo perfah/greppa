@@ -673,10 +673,11 @@ async fn main() {
 
     // Print the resolved LLM configuration, so it is obvious which
     // service and model are used. Any OpenAI-compatible service works;
-    // the environment variables are documented in ollama_tick_listener.
+    // the environment variables are documented in tick_listener.
     // The API key is deliberately not logged.
     log_message(&format!("LLM base URL: {}", tick_listener::llm_base_url()));
     log_message(&format!("LLM model: {}", tick_listener::llm_model()));
+    log_message(&format!("LLM completion model: {}", tick_listener::llm_completion_model()));
 
     // Clear the stale analysis files left over from a previous run so the
     // UI does not show outdated content before the first tick - but spare

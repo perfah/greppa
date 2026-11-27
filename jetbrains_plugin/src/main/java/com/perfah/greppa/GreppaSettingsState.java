@@ -40,16 +40,36 @@ public class GreppaSettingsState implements PersistentStateComponent<GreppaSetti
     public String llmBaseUrl = "http://localhost:11434/v1";
 
     /**
-     * The LLM model the LSP server uses for its analyses and completions,
-     * e.g. "qwen2.5-coder:7b" (Ollama) or "gpt-4o-mini" (OpenAI). Passed
-     * to the server as the GREPPA_LLM_MODEL environment variable. The
-     * default is the Rust server's own built-in default model, so the
-     * settings field shows the model a fresh installation actually uses
-     * instead of hiding the default in the tooltip; an empty value
-     * leaves the variable unset, and the same built-in default model
-     * applies.
+     * The LLM model the LSP server uses for its analyses - and for
+     * completions when no completion model is set (see
+     * llmCompletionModel) - e.g. "qwen2.5-coder:7b" (Ollama) or
+     * "gpt-4o-mini" (OpenAI). Passed to the server as the
+     * GREPPA_LLM_MODEL environment variable. The default is the Rust
+     * server's own built-in default model, so the settings field shows
+     * the model a fresh installation actually uses instead of hiding
+     * the default in the tooltip; an empty value leaves the variable
+     * unset, and the same built-in default model applies.
      */
     public String llmModel = "gemma4:31b-cloud";
+
+    /**
+     * The LLM model the LSP server uses for completions (autocomplete),
+     * e.g. "qwen2.5-coder:7b" (Ollama); empty (the default) means the
+     * analysis model (llmModel) is used for completions as well. A
+     * dedicated completion model exists because the IDE's LSP client
+     * abandons a completion request after roughly ten seconds: a
+     * reasoning-heavy analysis model thinks for minutes before its
+     * first answer token, so its completions never arrive within the
+     * deadline and no suggestion appears. A small, fast, non-reasoning
+     * model answers in time; the analysis keeps the heavy model,
+     * because it has no deadline. Passed to the server as the
+     * GREPPA_LLM_COMPLETION_MODEL environment variable when the server
+     * is launched; an empty value leaves the variable unset, and the
+     * server falls back to the analysis model. Like the other LLM
+     * settings, a change takes effect the next time the LSP server is
+     * started.
+     */
+    public String llmCompletionModel = "";
 
     /**
      * Maximum number of tokens the LLM may generate for one inference -

@@ -43,16 +43,36 @@ pub(crate) fn llm_base_url() -> String {
         .unwrap_or_else(|_| "http://localhost:11434/v1".to_string())
 }
 
-/// Resolves the model name from the environment. The IDE's server
-/// descriptor passes the model configured in the settings as
+/// Resolves the analysis model name from the environment. The IDE's
+/// server descriptor passes the model configured in the settings as
 /// GREPPA_LLM_MODEL, so a model set in the IDE reaches the server
 /// here; the default is the Ollama tag "gemma4:31b-cloud", the model
 /// the plugin's default configuration targets. Point the variable at
 /// the provider's own model name (e.g. "gpt-4o-mini" for OpenAI) to
-/// use a different service.
+/// use a different service. Also the fallback for completions when
+/// no dedicated completion model is configured (see
+/// llm_completion_model).
 pub(crate) fn llm_model() -> String {
     std::env::var("GREPPA_LLM_MODEL")
         .unwrap_or_else(|_| "gemma4:31b-cloud".to_string())
+}
+
+/// Resolves the model name used for completions from the environment.
+/// The IDE's server descriptor passes the model configured in the
+/// settings as GREPPA_LLM_COMPLETION_MODEL; unset or empty means no
+/// separate completion model is configured, so the analysis model (see
+/// llm_model) is used. A dedicated completion model exists because
+/// the IDE's LSP client abandons a completion request after roughly
+/// ten seconds: a reasoning-heavy analysis model thinks for minutes
+/// before its first answer token, so its completions never arrive
+/// within the deadline and no suggestion appears. A small, fast,
+/// non-reasoning model answers in time; the analysis keeps the heavy
+/// model, because it has no deadline.
+pub(crate) fn llm_completion_model() -> String {
+    match std::env::var("GREPPA_LLM_COMPLETION_MODEL") {
+        Ok(model) if !model.trim().is_empty() => model,
+        _ => llm_model(),
+    }
 }
 
 /// Resolves the API key sent as the bearer token. Local services such
@@ -265,6 +285,13 @@ impl StreamingTickListener for OllamaTickListener {
 /// numbered code and the <CURSOR> marker, so the model only has to
 /// produce the insertion text.
 ///
+/// The model is the dedicated completion model when one is configured
+/// (see llm_completion_model), otherwise the analysis model: the IDE's
+/// LSP client abandons a completion request after roughly ten seconds,
+/// so completions need a model that answers within that deadline - a
+/// reasoning-heavy analysis model thinks for minutes before its first
+/// answer token, and its suggestions never arrive.
+///
 /// The token budget is the same setting the analysis request uses (see
 /// llm_max_tokens): a configured budget caps the completion as well, and
 /// with no cap configured the max_tokens parameter is omitted entirely,
@@ -302,7 +329,7 @@ pub async fn complete(
     position: Position,
 ) -> anyhow::Result<String> {
     let client = llm_client();
-    let model = llm_model();
+    let model = llm_completion_model();
 
     // The builder's setter methods borrow (each takes &mut self and
     // returns &mut Self), so a chained

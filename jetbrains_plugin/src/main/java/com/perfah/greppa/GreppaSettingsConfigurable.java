@@ -26,6 +26,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         GreppaSettingsState settings = GreppaSettingsState.getInstance();
         return !settingsComponent.getLlmBaseUrl().equals(settings.llmBaseUrl)
                 || !settingsComponent.getLlmModel().equals(settings.llmModel)
+                || !settingsComponent.getLlmCompletionModel().equals(settings.llmCompletionModel)
                 || !settingsComponent.getLlmApiKey().equals(settings.getLlmApiKey())
                 || !settingsComponent.getGuideline().equals(settings.guideline)
                 || settingsComponent.getLlmMaxTokens() != settings.llmMaxTokens
@@ -41,6 +42,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         GreppaSettingsState settings = GreppaSettingsState.getInstance();
         settings.llmBaseUrl = settingsComponent.getLlmBaseUrl();
         settings.llmModel = settingsComponent.getLlmModel();
+        settings.llmCompletionModel = settingsComponent.getLlmCompletionModel();
         settings.setLlmApiKey(settingsComponent.getLlmApiKey());
         settings.guideline = settingsComponent.getGuideline();
         settings.llmMaxTokens = settingsComponent.getLlmMaxTokens();
@@ -56,6 +58,7 @@ public class GreppaSettingsConfigurable implements Configurable {
         GreppaSettingsState settings = GreppaSettingsState.getInstance();
         settingsComponent.setLlmBaseUrl(settings.llmBaseUrl);
         settingsComponent.setLlmModel(settings.llmModel);
+        settingsComponent.setLlmCompletionModel(settings.llmCompletionModel);
         settingsComponent.setLlmApiKey(settings.getLlmApiKey());
         settingsComponent.setGuideline(settings.guideline);
         // Math.max guards a hand-edited negative value in the XML: the

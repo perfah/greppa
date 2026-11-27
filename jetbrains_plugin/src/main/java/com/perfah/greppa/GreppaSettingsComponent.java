@@ -71,8 +71,14 @@ public class GreppaSettingsComponent {
     private final JPanel panel;
     /** Base URL of the LLM service; empty means the server's default. */
     private final JTextField llmBaseUrlField = new JTextField();
-    /** Input for the LLM model name; empty means the server's default. */
+    /** Input for the LLM analysis model name; empty means the server's default. */
     private final JTextField llmModelField = new JTextField();
+    /**
+     * Input for the LLM completion model name; empty means the analysis
+     * model above is used for completions as well (see
+     * GreppaSettingsState.llmCompletionModel).
+     */
+    private final JTextField llmCompletionModelField = new JTextField();
     /** Input for the LLM service's API key; empty means the server's placeholder key. */
     private final JPasswordField llmApiKeyField = new JPasswordField();
     /** Free-text standing instructions for the LLM; empty means none. */
@@ -133,10 +139,16 @@ public class GreppaSettingsComponent {
                         + "Empty = the default 'http://localhost:11434/v1' (a local Ollama).");
 
         llmModelField.setToolTipText(
-                "LLM model used for analyses and completions, e.g. 'qwen2.5-coder:7b' (Ollama) "
-                        + "or 'gpt-4o-mini' (OpenAI). "
+                "LLM model used for analyses - and for completions when the completion model below is empty - "
+                        + "e.g. 'qwen2.5-coder:7b' (Ollama) or 'gpt-4o-mini' (OpenAI). "
                         + "Empty = the default model 'gemma4:31b-cloud' "
                         + "(run 'ollama pull gemma4:31b-cloud' once to install it).");
+
+        llmCompletionModelField.setToolTipText(
+                "LLM model used for autocomplete completions, e.g. 'qwen2.5-coder:7b' (Ollama). "
+                        + "Empty = the LLM model above is used for completions as well. "
+                        + "The IDE abandons a completion request after about 10 seconds, so use a fast, non-reasoning model here: "
+                        + "a heavy reasoning model thinks for minutes before its first answer token, and its suggestions never arrive in time.");
 
         llmApiKeyField.setToolTipText(
                 "API key for the LLM service. Hosted services (OpenAI, Anthropic) require it; "
@@ -231,6 +243,7 @@ public class GreppaSettingsComponent {
         panel = FormBuilder.createFormBuilder()
                 .addLabeledComponent("LLM base URL:", llmBaseUrlField, 1, false)
                 .addLabeledComponent("LLM model:", llmModelField, 1, false)
+                .addLabeledComponent("LLM completion model:", llmCompletionModelField, 1, false)
                 .addLabeledComponent("LLM API key:", llmApiKeyField, 1, false)
                 .addLabeledComponent("LLM guideline:", new JBScrollPane(guidelineField), 1, false)
                 .addLabeledComponent("LLM max tokens:", llmMaxTokensField, 1, false)
@@ -323,14 +336,24 @@ public class GreppaSettingsComponent {
         llmBaseUrlField.setText(baseUrl == null ? "" : baseUrl);
     }
 
-    /** Returns the configured LLM model, or an empty string for the default. */
+    /** Returns the configured LLM analysis model, or an empty string for the default. */
     public @NotNull String getLlmModel() {
         return llmModelField.getText();
     }
 
-    /** Sets the shown LLM model; null is treated as the empty string. */
+    /** Sets the shown LLM analysis model; null is treated as the empty string. */
     public void setLlmModel(String model) {
         llmModelField.setText(model == null ? "" : model);
+    }
+
+    /** Returns the configured LLM completion model, or an empty string for the analysis model. */
+    public @NotNull String getLlmCompletionModel() {
+        return llmCompletionModelField.getText();
+    }
+
+    /** Sets the shown LLM completion model; null is treated as the empty string. */
+    public void setLlmCompletionModel(String model) {
+        llmCompletionModelField.setText(model == null ? "" : model);
     }
 
     /** Returns the configured API key, or an empty string for the placeholder. */
